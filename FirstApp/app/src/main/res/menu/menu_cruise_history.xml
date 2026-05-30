@@ -1,0 +1,8 @@
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/action_saved_tracks"
+        android:title="Saved Tracks" />
+    <item
+        android:id="@+id/action_race_history"
+        android:title="Race History" />
+</menu>
