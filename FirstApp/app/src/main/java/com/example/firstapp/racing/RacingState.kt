@@ -14,12 +14,10 @@ class RacingState(
     private val view: View,
     private val onStateChange: (AppState) -> Unit
 ) {
-    private companion object {
-        var session = QuickRaceSession()
-        var isInitialized = false
-        private val handler = Handler(Looper.getMainLooper())
-        private var timerRunnable: Runnable? = null
-    }
+    private val session = QuickRaceSession()
+    private var isInitialized = false
+    private val handler = Handler(Looper.getMainLooper())
+    private var timerRunnable: Runnable? = null
 
     fun update(speed: Int, latLng: com.huawei.hms.maps.model.LatLng?) {
         if (!isInitialized) {

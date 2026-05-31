@@ -52,19 +52,12 @@ fun RaceTrackerApp() {
     var currentLatLng by remember { mutableStateOf<LatLng?>(null) }
     var currentBearing by remember { mutableFloatStateOf(0f) }
 
-    DisposableEffect(Unit) {
-        val tracker = LocationTracker(context)
-        tracker.startTracking { data ->
-            currentSpeed = data.speed
-            currentLatLng = data.latLng
-            currentBearing = data.bearing
-        }
-        onDispose { tracker.stopTracking() }
-    }
-
     var hasLocationPermission by remember {
         mutableStateOf(
-            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.ACCESS_FINE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
         )
     }
 
@@ -82,18 +75,28 @@ fun RaceTrackerApp() {
         }
     }
 
+    DisposableEffect(hasLocationPermission) {
+        if (!hasLocationPermission) return@DisposableEffect onDispose {}
+        val tracker = LocationTracker(context)
+        tracker.startTracking { data ->
+            currentSpeed = data.speed
+            currentLatLng = data.latLng
+            currentBearing = data.bearing
+        }
+        onDispose { tracker.stopTracking() }
+    }
+
     if (hasLocationPermission) {
         Box(modifier = Modifier.fillMaxSize()) {
             // 1. PERSISTENT BACKGROUND MAP
             MapBackground(currentLatLng, currentBearing)
-            
+
             // 2. STATE UI OVERLAY
             FSMOverlay(
                 state = currentState,
                 speed = currentSpeed,
-                latLng = currentLatLng,
-                onStateChange = { currentState = it }
-            )
+                latLng = currentLatLng
+            ) { currentState = it }
         }
     } else {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -104,14 +107,34 @@ fun RaceTrackerApp() {
 
 @Composable
 fun MapBackground(latLng: LatLng?, bearing: Float) {
+    val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val mapView = remember { MapView(context) }
     var huaweiMapInstance by remember { mutableStateOf<com.huawei.hms.maps.HuaweiMap?>(null) }
-    
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_CREATE -> mapView.onCreate(Bundle())
+                Lifecycle.Event.ON_START -> mapView.onStart()
+                Lifecycle.Event.ON_RESUME -> mapView.onResume()
+                Lifecycle.Event.ON_PAUSE -> mapView.onPause()
+                Lifecycle.Event.ON_STOP -> mapView.onStop()
+                Lifecycle.Event.ON_DESTROY -> mapView.onDestroy()
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
     // We update the map whenever latLng or bearing changes
     LaunchedEffect(latLng, bearing, huaweiMapInstance) {
         val map = huaweiMapInstance ?: return@LaunchedEffect
         val pos = latLng ?: return@LaunchedEffect
-        
+
         val cameraPosition = CameraPosition.Builder()
             .target(pos)
             .zoom(18f)
@@ -122,30 +145,15 @@ fun MapBackground(latLng: LatLng?, bearing: Float) {
     }
 
     AndroidView(
-        factory = { ctx ->
-            val mapView = MapView(ctx)
-            mapView.onCreate(null)
-            
+        factory = {
             mapView.getMapAsync { hMap ->
                 huaweiMapInstance = hMap
                 try {
                     hMap.isMyLocationEnabled = true
                     hMap.uiSettings.isRotateGesturesEnabled = true
                     hMap.uiSettings.isTiltGesturesEnabled = true
-                } catch (e: SecurityException) {}
+                } catch (_: SecurityException) {}
             }
-
-            val observer = LifecycleEventObserver { _, event ->
-                when (event) {
-                    Lifecycle.Event.ON_START -> mapView.onStart()
-                    Lifecycle.Event.ON_RESUME -> mapView.onResume()
-                    Lifecycle.Event.ON_PAUSE -> mapView.onPause()
-                    Lifecycle.Event.ON_STOP -> mapView.onStop()
-                    Lifecycle.Event.ON_DESTROY -> mapView.onDestroy()
-                    else -> {}
-                }
-            }
-            lifecycleOwner.lifecycle.addObserver(observer)
             mapView
         },
         modifier = Modifier.fillMaxSize()

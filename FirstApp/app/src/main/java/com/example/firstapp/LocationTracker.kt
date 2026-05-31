@@ -12,7 +12,7 @@ data class LocationData(
     val bearing: Float
 )
 
-class LocationTracker(private val context: Context) {
+class LocationTracker(context: Context) {
     private val fusedLocationClient: FusedLocationProviderClient =
         LocationServices.getFusedLocationProviderClient(context)
     
@@ -25,9 +25,11 @@ class LocationTracker(private val context: Context) {
             priority = LocationRequest.PRIORITY_HIGH_ACCURACY
         }
 
-        locationCallback = object : LocationCallback() {
+        val callback = object : LocationCallback() {
             override fun onLocationResult(locationResult: LocationResult?) {
                 locationResult?.lastLocation?.let { location ->
+                    if (location.accuracy > 20f) return
+                    if (location.speed < 0f) return
                     onLocationUpdate(
                         LocationData(
                             latLng = LatLng(location.latitude, location.longitude),
@@ -38,10 +40,11 @@ class LocationTracker(private val context: Context) {
                 }
             }
         }
+        locationCallback = callback
 
         fusedLocationClient.requestLocationUpdates(
             locationRequest,
-            locationCallback,
+            callback,
             Looper.getMainLooper()
         )
     }
@@ -49,6 +52,7 @@ class LocationTracker(private val context: Context) {
     fun stopTracking() {
         locationCallback?.let {
             fusedLocationClient.removeLocationUpdates(it)
+            locationCallback = null
         }
     }
 }
