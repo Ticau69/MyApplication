@@ -2,20 +2,58 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
+    <!-- Top Center: Mod indicator -->
     <TextView
+        android:id="@+id/tvCreationMode"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|center_horizontal"
         android:layout_marginTop="16dp"
         android:background="#80000000"
         android:padding="8dp"
-        android:text="RECORDING TRACK..."
-        android:textColor="#FFFFFF" />
+        android:text="TAP PE HARTĂ PENTRU A PLASA PUNCTE"
+        android:textColor="#FFFFFF"
+        android:textSize="12sp"/>
 
+    <!-- Right Side: Waypoint type buttons -->
     <LinearLayout
+        android:id="@+id/layoutWaypointButtons"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="bottom|end"
+        android:layout_gravity="center_vertical|end"
+        android:layout_marginEnd="16dp"
+        android:orientation="vertical">
+
+        <Button
+            android:id="@+id/btnSelectStart"
+            android:layout_width="100dp"
+            android:layout_height="48dp"
+            android:text="START"
+            android:textSize="12sp"/>
+
+        <Button
+            android:id="@+id/btnSelectCheckpoint"
+            android:layout_width="100dp"
+            android:layout_height="48dp"
+            android:layout_marginTop="12dp"
+            android:text="CHECKPOINT"
+            android:textSize="11sp"/>
+
+        <Button
+            android:id="@+id/btnSelectFinish"
+            android:layout_width="100dp"
+            android:layout_height="48dp"
+            android:layout_marginTop="12dp"
+            android:text="FINISH"
+            android:textSize="12sp"/>
+
+    </LinearLayout>
+
+    <!-- Bottom: Cancel + Save -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
         android:layout_margin="16dp"
         android:orientation="horizontal">
 
@@ -23,14 +61,21 @@
             android:id="@+id/btnCancelCreation"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Cancel" />
+            android:text="Anulează"/>
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"/>
 
         <Button
             android:id="@+id/btnSaveTrack"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:text="Save Track" />
+            android:text="Salvează"
+            android:enabled="false"
+            android:alpha="0.5"/>
+
     </LinearLayout>
 
 </FrameLayout>

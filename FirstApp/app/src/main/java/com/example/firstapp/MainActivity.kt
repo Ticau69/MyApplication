@@ -2,6 +2,8 @@ package com.example.firstapp
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -21,6 +23,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import android.view.LayoutInflater
+import android.view.ViewGroup
 import com.example.firstapp.history.HistoryState
 import com.example.firstapp.creation.CreationState
 import com.example.firstapp.cruise.CruiseState
@@ -28,9 +31,18 @@ import com.example.firstapp.racing.RacingState
 import com.example.trackappv2.R
 import com.huawei.hms.maps.MapView
 import com.huawei.hms.maps.MapsInitializer
-import com.huawei.hms.maps.model.LatLng
-import com.huawei.hms.maps.model.CameraPosition
 import com.huawei.hms.maps.CameraUpdateFactory
+import com.huawei.hms.maps.HuaweiMap
+import com.huawei.hms.maps.model.BitmapDescriptorFactory
+import com.huawei.hms.maps.model.CameraPosition
+import com.huawei.hms.maps.model.LatLng
+import com.huawei.hms.maps.model.Marker
+import com.huawei.hms.maps.model.MarkerOptions
+import com.example.firstapp.data.Track
+import com.example.firstapp.data.TrackRepository
+import androidx.core.graphics.toColorInt
+import androidx.core.graphics.createBitmap
+import com.example.firstapp.history.SavedTracksState
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -51,12 +63,13 @@ fun RaceTrackerApp() {
     var currentSpeed by remember { mutableIntStateOf(0) }
     var currentLatLng by remember { mutableStateOf<LatLng?>(null) }
     var currentBearing by remember { mutableFloatStateOf(0f) }
+    var huaweiMapRef by remember { mutableStateOf<HuaweiMap?>(null) }
 
     var hasLocationPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(
                 context,
-                Manifest.permission.ACCESS_FINE_LOCATION
+                Manifest.permission.ACCESS_FINE_LOCATION,
             ) == PackageManager.PERMISSION_GRANTED
         )
     }
@@ -89,14 +102,22 @@ fun RaceTrackerApp() {
     if (hasLocationPermission) {
         Box(modifier = Modifier.fillMaxSize()) {
             // 1. PERSISTENT BACKGROUND MAP
-            MapBackground(currentLatLng, currentBearing)
+            MapBackground(
+                latLng = currentLatLng,
+                bearing = currentBearing,
+                appState = currentState,
+                onMapReady = { huaweiMapRef = it }
+            )
+
 
             // 2. STATE UI OVERLAY
             FSMOverlay(
                 state = currentState,
                 speed = currentSpeed,
-                latLng = currentLatLng
-            ) { currentState = it }
+                latLng = currentLatLng,
+                huaweiMap = huaweiMapRef,
+                onStateChange = { currentState = it }
+            )
         }
     } else {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -106,11 +127,16 @@ fun RaceTrackerApp() {
 }
 
 @Composable
-fun MapBackground(latLng: LatLng?, bearing: Float) {
+fun MapBackground(
+    latLng: LatLng?,
+    bearing: Float,
+    appState: AppState,
+    onMapReady: (HuaweiMap) -> Unit = {}
+) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val mapView = remember { MapView(context) }
-    var huaweiMapInstance by remember { mutableStateOf<com.huawei.hms.maps.HuaweiMap?>(null) }
+    var huaweiMapInstance by remember { mutableStateOf<HuaweiMap?>(null) }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -131,16 +157,15 @@ fun MapBackground(latLng: LatLng?, bearing: Float) {
     }
 
     // We update the map whenever latLng or bearing changes
-    LaunchedEffect(latLng, bearing, huaweiMapInstance) {
+    LaunchedEffect(latLng, bearing, huaweiMapInstance, appState) {
         val map = huaweiMapInstance ?: return@LaunchedEffect
         val pos = latLng ?: return@LaunchedEffect
-
-        val cameraPosition = CameraPosition.Builder()
-            .target(pos)
-            .zoom(18f)
-            .bearing(bearing)
-            .tilt(45f)
-            .build()
+        val cameraPosition = when (appState) {
+            AppState.RACE_CREATION -> CameraPosition.Builder()
+                .target(pos).zoom(17f).bearing(0f).tilt(0f).build()
+            else -> CameraPosition.Builder()
+                .target(pos).zoom(18f).bearing(bearing).tilt(45f).build()
+        }
         map.animateCamera(CameraUpdateFactory.newCameraPosition(cameraPosition))
     }
 
@@ -148,6 +173,7 @@ fun MapBackground(latLng: LatLng?, bearing: Float) {
         factory = {
             mapView.getMapAsync { hMap ->
                 huaweiMapInstance = hMap
+                onMapReady(hMap)
                 try {
                     hMap.isMyLocationEnabled = true
                     hMap.uiSettings.isRotateGesturesEnabled = true
@@ -165,8 +191,17 @@ fun FSMOverlay(
     state: AppState,
     speed: Int,
     latLng: LatLng?,
+    huaweiMap: HuaweiMap?,
     onStateChange: (AppState) -> Unit
 ) {
+    // Reținem instanțele state — se creează O SINGURĂ DATĂ per tranziție
+    val cruiseState = remember(state) { mutableStateOf<CruiseState?>(null) }
+    val racingState = remember(state) { mutableStateOf<RacingState?>(null) }
+    val creationState = remember(state) { mutableStateOf<CreationState?>(null) }
+    val historyState = remember(state) { mutableStateOf<HistoryState?>(null) }
+    val savedTracksState = remember(state) { mutableStateOf<SavedTracksState?>(null) }
+    val scope = rememberCoroutineScope()
+
     key(state) {
         AndroidView(
             factory = { ctx ->
@@ -175,16 +210,53 @@ fun FSMOverlay(
                     AppState.RACING -> R.layout.fragment_racing
                     AppState.RACE_CREATION -> R.layout.fragment_race_creation
                     AppState.HISTORY -> R.layout.fragment_history
+                    AppState.SAVED_TRACKS -> R.layout.fragment_saved_tracks
                 }
-                LayoutInflater.from(ctx).inflate(layoutId, null)
+                val view = LayoutInflater.from(ctx).inflate(layoutId, null, false)
+
+                // Creăm instanța și o salvăm — factory rulează O SINGURĂ DATĂ
+                when (state) {
+                    AppState.CRUISE -> {
+                        cruiseState.value = CruiseState(view, onStateChange).also { it.setup() }
+                    }
+                    AppState.RACING -> {
+                        racingState.value = RacingState(view, onStateChange)
+                    }
+                    AppState.RACE_CREATION -> {
+                        val v = LayoutInflater.from(ctx).inflate(R.layout.fragment_race_creation, null)
+                        creationState.value = CreationState(v, onStateChange, scope)
+                        huaweiMap?.let { creationState.value?.setup(it) }
+                        v
+                    }
+                    AppState.HISTORY -> {
+                        historyState.value = HistoryState(view, onStateChange).also { it.setup() }
+                    }
+                    AppState.SAVED_TRACKS -> {
+                        savedTracksState.value = SavedTracksState(view, onStateChange, huaweiMap)
+                            .also { it.setup() }
+                    }
+                }
+                view
             },
             modifier = Modifier.fillMaxSize(),
-            update = { view ->
-                when (state) {
-                    AppState.CRUISE -> CruiseState(view, onStateChange).setup()
-                    AppState.RACING -> RacingState(view, onStateChange).update(speed, latLng)
-                    AppState.RACE_CREATION -> CreationState(view, onStateChange).setup()
-                    AppState.HISTORY -> HistoryState(view, onStateChange).setup()
+            update = { _ ->
+                // Dacă harta a venit după ce view-ul a fost creat
+                if (state == AppState.RACE_CREATION) {
+                    huaweiMap?.let { map ->
+                        creationState.value?.let { cs ->
+                            if (cs.huaweiMap == null) cs.setup(map) // ← asta poate rula repetat!
+                        }
+                    }
+                }
+                if (state == AppState.RACING) {
+                    racingState.value?.update(speed, latLng)
+                }
+                if (state == AppState.SAVED_TRACKS) {
+                    huaweiMap?.let { map ->
+                        savedTracksState.value?.let { st ->
+                            if (!st.isMapSet) st.setMap(map)
+                        }
+                    }
                 }
             }
         )
@@ -192,5 +264,5 @@ fun FSMOverlay(
 }
 
 enum class AppState {
-    CRUISE, RACING, RACE_CREATION, HISTORY
+    CRUISE, RACING, RACE_CREATION, HISTORY, SAVED_TRACKS
 }

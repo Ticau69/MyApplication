@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">trackappv2</string>
+    <string name="no_saved_tracks">Nu există trasee salvate.</string>
+    <string name="checkpoint_count">%1$d checkpoint-uri</string>
 </resources>

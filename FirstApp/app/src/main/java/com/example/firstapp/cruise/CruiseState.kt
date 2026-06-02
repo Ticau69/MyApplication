@@ -28,6 +28,10 @@ class CruiseState(
         view.findViewById<ImageButton>(R.id.btnMenu)?.setOnClickListener { btn ->
             showPopupMenu(btn)
         }
+
+        view.findViewById<Button>(R.id.btnCreateTrack)?.setOnClickListener {
+            onStateChange(AppState.RACE_CREATION)
+        }
     }
 
     private fun showPopupMenu(anchor: View) {
@@ -36,11 +40,15 @@ class CruiseState(
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 R.id.action_saved_tracks -> {
-                    // Logic for saved tracks
+                    onStateChange(AppState.SAVED_TRACKS) // ← în loc de RACE_CREATION
                     true
                 }
                 R.id.action_race_history -> {
                     onStateChange(AppState.HISTORY)
+                    true
+                }
+                R.id.action_create_track -> {
+                    onStateChange(AppState.RACE_CREATION)
                     true
                 }
                 else -> false

@@ -7,7 +7,6 @@ import android.widget.Button
 import android.widget.TextView
 import com.example.firstapp.AppState
 import com.example.trackappv2.R
-import com.example.firstapp.racing.HistoryManager
 import com.example.firstapp.racing.RaceRecord
 
 class RacingState(
@@ -18,6 +17,16 @@ class RacingState(
     private var isInitialized = false
     private val handler = Handler(Looper.getMainLooper())
     private var timerRunnable: Runnable? = null
+
+    init {
+        // Listener setat O SINGURĂ DATĂ la creare, nu la fiecare update
+        view.findViewById<Button>(R.id.btnStopRacing)?.setOnClickListener {
+            stopTimerTicker()
+            saveRaceRecord()
+            isInitialized = false
+            onStateChange(AppState.CRUISE)
+        }
+    }
 
     fun update(speed: Int, latLng: com.huawei.hms.maps.model.LatLng?) {
         if (!isInitialized) {
@@ -30,20 +39,14 @@ class RacingState(
 
         view.findViewById<TextView>(R.id.tvSpeed)?.text = "$speed km/h"
         view.findViewById<TextView>(R.id.tvMaxSpeed)?.text = "Max: ${session.maxSpeed} km/h"
-        view.findViewById<TextView>(R.id.tvDistance)?.text = String.format("Dist: %.2f km", session.getDistanceKm())
-        
-        updateTimerUI()
+        view.findViewById<TextView>(R.id.tvDistance)?.text =
+            String.format("Dist: %.2f km", session.getDistanceKm())
 
-        view.findViewById<Button>(R.id.btnStopRacing)?.setOnClickListener {
-            stopTimerTicker()
-            saveRaceRecord()
-            isInitialized = false
-            onStateChange(AppState.CRUISE)
-        }
+        updateTimerUI()
     }
 
     private fun startTimerTicker() {
-        stopTimerTicker() // Clear any existing
+        stopTimerTicker()
         timerRunnable = object : Runnable {
             override fun run() {
                 updateTimerUI()
@@ -53,7 +56,7 @@ class RacingState(
         handler.post(timerRunnable!!)
     }
 
-    private fun stopTimerTicker() {
+    fun stopTimerTicker() {
         timerRunnable?.let { handler.removeCallbacks(it) }
         timerRunnable = null
     }
@@ -70,11 +73,9 @@ class RacingState(
         val context = view.context
         val manager = HistoryManager(context)
         val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
-        val dateStr = sdf.format(java.util.Date())
-        
         val record = RaceRecord(
             id = java.util.UUID.randomUUID().toString(),
-            date = dateStr,
+            date = sdf.format(java.util.Date()),
             maxSpeed = session.maxSpeed,
             distanceKm = session.getDistanceKm(),
             durationSeconds = session.getDurationSeconds()

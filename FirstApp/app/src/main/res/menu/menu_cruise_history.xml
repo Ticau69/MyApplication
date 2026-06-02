@@ -5,4 +5,7 @@
     <item
         android:id="@+id/action_race_history"
         android:title="Race History" />
+    <item
+        android:id="@+id/action_create_track"
+        android:title="Creează Traseu" />
 </menu>
