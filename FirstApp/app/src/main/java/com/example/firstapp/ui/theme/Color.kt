@@ -1,11 +1,30 @@
-package com.example.trackappv2.ui.theme
+package com.example.firstapp.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val Purple80 = Color(0xFFD0BCFF)
-val PurpleGrey80 = Color(0xFFCCC2DC)
-val Pink80 = Color(0xFFEFB8C8)
+// ==========================================
+// VELOCITY PERFORMANCE SYSTEM - COLORS
+// ==========================================
 
-val Purple40 = Color(0xFF6650a4)
-val PurpleGrey40 = Color(0xFF625b71)
-val Pink40 = Color(0xFF7D5260)
+// Surfaces (Dark HUD Backgrounds)
+val SurfaceDark = Color(0xFF12121D)
+val SurfaceContainerLowest = Color(0xFF0D0D17)
+val SurfaceContainerLow = Color(0xFF1A1B25)
+val SurfaceContainer = Color(0xFF1F1F29)
+val SurfaceBright = Color(0xFF383844)
+
+// Accents
+val PrimaryVoltBlue = Color(0xFFC2C1FF)
+val OnPrimary = Color(0xFF1A00A6)
+
+val SecondaryEnginePurple = Color(0xFF3E3C9D)
+val OnSecondary = Color(0xFFB2B1FF)
+
+// Alerts & Borders
+val BrakeRed = Color(0xFFFF4C4C) // Culoare agresivă pentru alerte și limite de traseu
+val OutlineSlate = Color(0xFF908FA3) // Pentru Ghost Buttons și elemente secundare
+val OutlineVariant = Color(0xFF464557)
+
+// Text
+val OnSurfaceText = Color(0xFFE3E1F0)
+val OnSurfaceVariantText = Color(0xFFC7C4DA)

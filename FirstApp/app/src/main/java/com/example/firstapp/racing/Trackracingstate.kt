@@ -1,14 +1,9 @@
 package com.example.firstapp.racing
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
-import android.os.Handler
-import android.os.Looper
-import android.view.View
-import android.widget.Button
-import android.widget.LinearLayout
-import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.createBitmap
 import com.example.firstapp.AppState
@@ -25,22 +20,19 @@ import com.huawei.hms.maps.model.JointType
 import com.huawei.hms.maps.model.RoundCap
 
 class TrackRacingState(
-    private val view: View,
+    private val context: Context,
     private val onStateChange: (AppState) -> Unit,
     private val track: Track,
     private val huaweiMap: HuaweiMap
 ) {
-    private val session = QuickRaceSession()
+    val session = QuickRaceSession()
     private var isInitialized = false
-    private val handler = Handler(Looper.getMainLooper())
-    private var timerRunnable: Runnable? = null
 
     // Polilinii pe hartă
-    private var trackPolyline: Polyline? = null      // traseul salvat (albastru)
-    private var gpsTrailPolyline: Polyline? = null   // urma GPS în timp real (verde)
+    private var trackPolyline: Polyline? = null
+    private var gpsTrailPolyline: Polyline? = null
     private val gpsTrailPoints = mutableListOf<LatLng>()
 
-    // Markeri traseu
     private val drawnMarkers = mutableListOf<Marker>()
 
     // Checkpoint tracking
@@ -49,26 +41,12 @@ class TrackRacingState(
     private val CHECKPOINT_RADIUS_M = 30f
 
     init {
-        // Construim lista de checkpoints în ordine: start → cp1..cpN → finish
         checkpoints = buildList {
             add(track.start.toLatLng())
             addAll(track.checkpoints.map { it.toLatLng() })
             add(track.finish.toLatLng())
         }
-
-        setupUI()
         drawSavedTrack()
-    }
-
-    private fun setupUI() {
-        view.findViewById<TextView>(R.id.tvTrackName)?.text = track.name
-
-        view.findViewById<Button>(R.id.btnStopRacing)?.setOnClickListener {
-            stopTimerTicker()
-            saveRaceRecord()
-            cleanup()
-            onStateChange(AppState.CRUISE)
-        }
     }
 
     private fun drawSavedTrack() {
@@ -82,7 +60,6 @@ class TrackRacingState(
             }
         }
 
-        // Poliline traseu salvat — albastru semi-transparent
         trackPolyline = huaweiMap.addPolyline(
             PolylineOptions()
                 .addAll(points)
@@ -93,7 +70,6 @@ class TrackRacingState(
                 .endCap(RoundCap())
         )
 
-        // Poliline urmă GPS — se completează în timp real, portocaliu
         gpsTrailPolyline = huaweiMap.addPolyline(
             PolylineOptions()
                 .color(Color.parseColor("#FFFF6B35"))
@@ -103,7 +79,6 @@ class TrackRacingState(
                 .endCap(RoundCap())
         )
 
-        // Marker Start
         drawnMarkers.add(
             huaweiMap.addMarker(
                 MarkerOptions()
@@ -114,7 +89,6 @@ class TrackRacingState(
             )
         )
 
-        // Marker Finish
         drawnMarkers.add(
             huaweiMap.addMarker(
                 MarkerOptions()
@@ -124,7 +98,6 @@ class TrackRacingState(
             )
         )
 
-        // Markeri Checkpoint
         track.checkpoints.forEach { cp ->
             drawnMarkers.add(
                 huaweiMap.addMarker(
@@ -141,31 +114,16 @@ class TrackRacingState(
         if (!isInitialized) {
             session.start()
             isInitialized = true
-            startTimerTicker()
-            // Sărim primul checkpoint (startul) dacă suntem deja pe el
             nextCheckpointIndex = 1
         }
 
         latLng?.let { pos ->
             session.update(speed, pos)
-
-            // Adăugăm punctul curent la urma GPS
             gpsTrailPoints.add(pos)
             gpsTrailPolyline?.points = gpsTrailPoints.toList()
 
-            // Verificăm dacă am ajuns la următorul checkpoint
             checkCheckpointProximity(pos)
-
-            // Actualizăm indicatorul checkpoint
-            updateCheckpointIndicator(pos)
         }
-
-        view.findViewById<TextView>(R.id.tvSpeed)?.text = "$speed km/h"
-        view.findViewById<TextView>(R.id.tvMaxSpeed)?.text = "Max: ${session.maxSpeed} km/h"
-        view.findViewById<TextView>(R.id.tvDistance)?.text =
-            String.format("Dist: %.2f km", session.getDistanceKm())
-
-        updateTimerUI()
     }
 
     private fun checkCheckpointProximity(pos: LatLng) {
@@ -177,48 +135,16 @@ class TrackRacingState(
         if (dist <= CHECKPOINT_RADIUS_M) {
             nextCheckpointIndex++
 
-            // Dacă am trecut de finish
             if (nextCheckpointIndex >= checkpoints.size) {
                 onFinishReached()
             }
         }
     }
 
-    private fun updateCheckpointIndicator(pos: LatLng) {
-        val layoutCp = view.findViewById<LinearLayout>(R.id.layoutCheckpoint) ?: return
-        val tvNext = view.findViewById<TextView>(R.id.tvNextCheckpoint) ?: return
-        val tvDist = view.findViewById<TextView>(R.id.tvCheckpointDist) ?: return
-
-        if (nextCheckpointIndex >= checkpoints.size) {
-            layoutCp.visibility = View.GONE
-            return
-        }
-
-        layoutCp.visibility = View.VISIBLE
-        val nextCp = checkpoints[nextCheckpointIndex]
-        val dist = distanceBetween(pos, nextCp)
-
-        val isFinish = nextCheckpointIndex == checkpoints.size - 1
-        val cpNumber = nextCheckpointIndex // 1-based față de start
-
-        tvNext.text = when {
-            isFinish -> "FINISH"
-            nextCheckpointIndex == 1 && track.checkpoints.isEmpty() -> "FINISH"
-            else -> "Checkpoint $cpNumber"
-        }
-
-        tvDist.text = if (dist >= 1000) {
-            String.format("%.1f km", dist / 1000f)
-        } else {
-            "${dist.toInt()} m"
-        }
-    }
-
     private fun onFinishReached() {
-        stopTimerTicker()
         saveRaceRecord()
 
-        android.app.AlertDialog.Builder(view.context)
+        android.app.AlertDialog.Builder(context)
             .setTitle("🏁 Finish!")
             .setMessage(
                 "Timp: ${formatTime(session.getDurationSeconds())}\n" +
@@ -233,27 +159,6 @@ class TrackRacingState(
             .show()
     }
 
-    private fun startTimerTicker() {
-        stopTimerTicker()
-        timerRunnable = object : Runnable {
-            override fun run() {
-                updateTimerUI()
-                handler.postDelayed(this, 1000)
-            }
-        }
-        handler.post(timerRunnable!!)
-    }
-
-    fun stopTimerTicker() {
-        timerRunnable?.let { handler.removeCallbacks(it) }
-        timerRunnable = null
-    }
-
-    private fun updateTimerUI() {
-        val tvTimer = view.findViewById<TextView>(R.id.tvTimer) ?: return
-        tvTimer.text = formatTime(session.getDurationSeconds())
-    }
-
     private fun formatTime(totalSecs: Long): String {
         val mins = totalSecs / 60
         val secs = totalSecs % 60
@@ -261,7 +166,6 @@ class TrackRacingState(
     }
 
     private fun saveRaceRecord() {
-        val context = view.context
         val manager = HistoryManager(context)
         val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
         val record = RaceRecord(
@@ -295,8 +199,7 @@ class TrackRacingState(
     }
 
     private fun bitmapFromVector(drawableRes: Int): com.huawei.hms.maps.model.BitmapDescriptor {
-        val ctx = view.context
-        val drawable = ContextCompat.getDrawable(ctx, drawableRes)!!
+        val drawable = ContextCompat.getDrawable(context, drawableRes)!!
         val bitmap = createBitmap(
             drawable.intrinsicWidth,
             drawable.intrinsicHeight,

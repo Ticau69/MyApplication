@@ -3,10 +3,6 @@ package com.example.firstapp.cruise
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.view.View
-import android.widget.Button
-import android.widget.ImageButton
-import android.widget.PopupMenu
 import androidx.core.content.ContextCompat
 import com.example.firstapp.AppState
 import com.example.firstapp.data.Track
@@ -29,13 +25,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class CruiseState(
-    private val view: View,
-    private val onStateChange: (AppState) -> Unit,
-    private val onStartTrackRace: (Track) -> Unit = {}
+    private val context: Context,
+    private val onStateChange: (AppState) -> Unit
 ) {
-    private var lastPromptedTrackId: String? = null
-    private var isDialogShowing = false
-
     // --- FOCUS MODE VARIABLES ---
     private var huaweiMap: HuaweiMap? = null
     var isMapSet = false
@@ -49,21 +41,6 @@ class CruiseState(
     private var focusJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.Main)
 
-    fun setup() {
-        val quickRaceBtn = view.findViewById<Button>(R.id.btnQuickRace)
-        quickRaceBtn?.setOnClickListener {
-            onStateChange(AppState.RACING)
-        }
-
-        view.findViewById<Button>(R.id.btnSettings)?.setOnClickListener {
-            // Placeholder pentru setări
-        }
-
-        view.findViewById<ImageButton>(R.id.btnMenu)?.setOnClickListener { btn ->
-            showPopupMenu(btn)
-        }
-    }
-
     // Funcție apelată din MainActivity când harta a fost încărcată
     fun setMap(map: HuaweiMap) {
         if (isMapSet) return
@@ -75,8 +52,8 @@ class CruiseState(
     }
 
     private fun loadTrackMarkers(map: HuaweiMap) {
-        val tracks = TrackRepository(view.context).getTracks()
-        val descriptor = bitmapDescriptorFromVector(view.context, R.drawable.ic_saved_track)
+        val tracks = TrackRepository(context).getTracks()
+        val descriptor = bitmapDescriptorFromVector(context, R.drawable.ic_saved_track)
 
         tracks.forEach { track ->
             val startLatLng = track.start.toLatLng()
@@ -96,7 +73,7 @@ class CruiseState(
             val track = trackMarkers[marker]
             if (track != null) {
                 enterFocusMode(track, map)
-                true // Returnăm true pentru a consuma eventul și a anula comportamentul default (centrarea simplă)
+                true // Returnăm true pentru a consuma eventul
             } else {
                 false
             }
@@ -109,9 +86,7 @@ class CruiseState(
 
         // Monitorizăm mișcările hărții
         map.setOnCameraMoveStartedListener { reason ->
-            // Dacă mișcarea este declanșată manual de degetul utilizatorului
             if (reason == HuaweiMap.OnCameraMoveStartedListener.REASON_GESTURE && focusedTrack != null) {
-                // Când utilizatorul explorează, resetăm timer-ul de 10s să nu îi dispară ruta subit
                 resetFocusTimer()
             }
         }
@@ -122,7 +97,6 @@ class CruiseState(
                 val currentCameraTarget = map.cameraPosition.target
                 val startTarget = track.start.toLatLng()
 
-                // Dacă utilizatorul a derulat harta mai mult de 3km distanță de punctul de start
                 if (distanceBetween(currentCameraTarget, startTarget) > 3000f) {
                     exitFocusMode()
                 }
@@ -131,13 +105,12 @@ class CruiseState(
     }
 
     private fun enterFocusMode(track: Track, map: HuaweiMap) {
-        exitFocusMode() // Ștergem o eventuală rută anterioară
+        exitFocusMode() 
         focusedTrack = track
 
         val routePoints = track.routedPoints.map { it.toLatLng() }
         if (routePoints.isEmpty()) return
 
-        // 1. Desenăm traseul efectiv (străzile)
         focusPolyline = map.addPolyline(
             PolylineOptions()
                 .addAll(routePoints)
@@ -145,12 +118,10 @@ class CruiseState(
                 .width(12f)
         )
 
-        // 2. Facem zoom/pan fluid ca să încadrăm tot traseul perfect pe ecran
         val boundsBuilder = LatLngBounds.Builder()
         routePoints.forEach { boundsBuilder.include(it) }
         map.animateCamera(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), 150))
 
-        // 3. Pornim cronometrul de inactivitate
         resetFocusTimer()
     }
 
@@ -177,29 +148,6 @@ class CruiseState(
             results
         )
         return results[0]
-    }
-
-    private fun showPopupMenu(anchor: View) {
-        val popup = PopupMenu(anchor.context, anchor)
-        popup.menuInflater.inflate(R.menu.menu_cruise_history, popup.menu)
-        popup.setOnMenuItemClickListener { item ->
-            when (item.itemId) {
-                R.id.action_saved_tracks -> {
-                    onStateChange(AppState.SAVED_TRACKS)
-                    true
-                }
-                R.id.action_race_history -> {
-                    onStateChange(AppState.HISTORY)
-                    true
-                }
-                R.id.action_create_track -> {
-                    onStateChange(AppState.RACE_CREATION)
-                    true
-                }
-                else -> false
-            }
-        }
-        popup.show()
     }
 
     private fun bitmapDescriptorFromVector(context: Context, vectorResId: Int): BitmapDescriptor {
