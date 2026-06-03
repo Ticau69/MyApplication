@@ -9,11 +9,9 @@ import javax.net.ssl.HttpsURLConnection
 
 object RouteHelper {
 
-    private const val API_KEY = "DgEDALyLFJ7AkTCA4gUPaACghvk9l1swQsMgsXS63+Pba7SykshRpVQuc8FnJa2wQq2bGVwKOt9aAKn7X5Bmgr95DCHns1LP7fCupw=="
-
     /**
-     * Returnează lista de puncte care urmează strada între origin și destination.
-     * Dacă API-ul eșuează, returnează lista originală (linie dreaptă fallback).
+     * Returnează punctele de pe stradă între origin și destination folosind OSRM (gratuit, fără cheie).
+     * Fallback la linie dreaptă dacă API-ul eșuează.
      */
     suspend fun getRoutedPoints(
         origin: LatLng,
@@ -21,39 +19,53 @@ object RouteHelper {
         waypoints: List<LatLng> = emptyList()
     ): List<LatLng> = withContext(Dispatchers.IO) {
         try {
-            val url = "https://mapapi.cloud.huawei.com/mapApi/v1/routeService/driving?key=$API_KEY"
-
-            val waypointsJson = if (waypoints.isNotEmpty()) {
-                val arr = waypoints.joinToString(",") { wp ->
-                    """{"lat":${wp.latitude},"lng":${wp.longitude}}"""
-                }
-                """"waypoints":[$arr],"""
-            } else ""
-
-            val body = """
-                {
-                    "origin":{"lat":${origin.latitude},"lng":${origin.longitude}},
-                    "destination":{"lat":${destination.latitude},"lng":${destination.longitude}},
-                    $waypointsJson
-                    "optimizeWaypoints": false
-                }
-            """.trimIndent()
-
-            val connection = URL(url).openConnection() as HttpsURLConnection
-            connection.apply {
-                requestMethod = "POST"
-                setRequestProperty("Content-Type", "application/json")
-                doOutput = true
-                outputStream.write(body.toByteArray())
+            val allPoints = buildList {
+                add(origin)
+                addAll(waypoints)
+                add(destination)
             }
 
-            val response = connection.inputStream.bufferedReader().readText()
+            val coords = allPoints.joinToString(";") { "${it.longitude},${it.latitude}" }
+
+            // radiuses=50 — caută strada în raza de 50m față de fiecare punct
+            val radiuses = allPoints.joinToString(";") { "50" }
+
+            val url = "https://routing.openstreetmap.de/routed-car/route/v1/driving/$coords" +
+                    "?overview=full&geometries=geojson&steps=true&continue_straight=false&radiuses=$radiuses"
+
+            android.util.Log.d("RouteHelper", "OSRM request: $url")
+
+            val connection = (URL(url).openConnection() as HttpsURLConnection).apply {
+                requestMethod = "GET"
+                setRequestProperty("User-Agent", "Mozilla/5.0 (Android; RaceTrackerApp)")
+                connectTimeout = 10_000
+                readTimeout = 10_000
+            }
+
+            val responseCode = connection.responseCode
+            val response = if (responseCode in 200..299) {
+                connection.inputStream.bufferedReader().readText()
+            } else {
+                throw Exception("OSRM HTTP $responseCode")
+            }
             connection.disconnect()
 
-            parseRoutePoints(response)
+            val points = parseOsrmPoints(response)
+
+            // Dacă ruta e prea scurtă față de numărul de puncte originale, fallback
+            if (points.size < 2) {
+                android.util.Log.w("RouteHelper", "Ruta prea scurtă, fallback")
+                return@withContext buildList {
+                    add(origin)
+                    addAll(waypoints)
+                    add(destination)
+                }
+            }
+
+            points
+
         } catch (e: Exception) {
-            android.util.Log.e("RouteHelper", "Eroare la fetch rută: ${e.message}")
-            // Fallback — linie dreaptă
+            android.util.Log.e("RouteHelper", "Eroare OSRM: ${e.message}", e)
             buildList {
                 add(origin)
                 addAll(waypoints)
@@ -62,36 +74,82 @@ object RouteHelper {
         }
     }
 
-    private fun parseRoutePoints(json: String): List<LatLng> {
+    /**
+     * Snap to road folosind OSRM match service.
+     */
+    suspend fun snapPointsToRoad(
+        points: List<LatLng>,
+        interpolate: Boolean = true
+    ): List<LatLng> = withContext(Dispatchers.IO) {
+        if (points.isEmpty()) return@withContext emptyList()
+        try {
+            val coords = points.joinToString(";") { "${it.longitude},${it.latitude}" }
+            val url = "https://router.project-osrm.org/match/v1/driving/$coords?overview=full&geometries=geojson"
+
+            val connection = (URL(url).openConnection() as HttpsURLConnection).apply {
+                requestMethod = "GET"
+                setRequestProperty("User-Agent", "Mozilla/5.0 (Android; RaceTrackerApp)")
+                connectTimeout = 10_000
+                readTimeout = 10_000
+            }
+
+            val responseCode = connection.responseCode
+            val response = if (responseCode in 200..299) {
+                connection.inputStream.bufferedReader().readText()
+            } else throw Exception("OSRM match HTTP $responseCode")
+            connection.disconnect()
+
+            parseOsrmMatchPoints(response)
+
+        } catch (e: Exception) {
+            android.util.Log.e("RouteHelper", "Eroare snap OSRM: ${e.message}", e)
+            points
+        }
+    }
+
+    private fun parseOsrmPoints(json: String): List<LatLng> {
         val points = mutableListOf<LatLng>()
         try {
             val root = JSONObject(json)
+            if (root.optString("code") != "Ok") {
+                android.util.Log.e("RouteHelper", "OSRM code: ${root.optString("code")}")
+                return points
+            }
             val routes = root.getJSONArray("routes")
             if (routes.length() == 0) return points
 
-            val route = routes.getJSONObject(0)
-            val paths = route.getJSONArray("paths")
-            if (paths.length() == 0) return points
+            val geometry = routes.getJSONObject(0).getJSONObject("geometry")
+            val coordinates = geometry.getJSONArray("coordinates")
 
-            val path = paths.getJSONObject(0)
-            val steps = path.getJSONArray("steps")
-
-            for (i in 0 until steps.length()) {
-                val step = steps.getJSONObject(i)
-                val polyline = step.getJSONArray("polyline")
-
-                for (j in 0 until polyline.length()) {
-                    val point = polyline.getJSONObject(j)
-                    points.add(
-                        LatLng(
-                            point.getDouble("lat"),
-                            point.getDouble("lng")
-                        )
-                    )
-                }
+            for (i in 0 until coordinates.length()) {
+                val coord = coordinates.getJSONArray(i)
+                // GeoJSON e [lng, lat]
+                points.add(LatLng(coord.getDouble(1), coord.getDouble(0)))
             }
         } catch (e: Exception) {
-            android.util.Log.e("RouteHelper", "Eroare la parse: ${e.message}")
+            android.util.Log.e("RouteHelper", "Parse OSRM error: ${e.message}")
+        }
+        return points
+    }
+
+    private fun parseOsrmMatchPoints(json: String): List<LatLng> {
+        val points = mutableListOf<LatLng>()
+        try {
+            val root = JSONObject(json)
+            if (root.optString("code") != "Ok") return points
+
+            val matchings = root.getJSONArray("matchings")
+            if (matchings.length() == 0) return points
+
+            val geometry = matchings.getJSONObject(0).getJSONObject("geometry")
+            val coordinates = geometry.getJSONArray("coordinates")
+
+            for (i in 0 until coordinates.length()) {
+                val coord = coordinates.getJSONArray(i)
+                points.add(LatLng(coord.getDouble(1), coord.getDouble(0)))
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("RouteHelper", "Parse OSRM match error: ${e.message}")
         }
         return points
     }

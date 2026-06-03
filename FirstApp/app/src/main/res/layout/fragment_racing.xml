@@ -9,7 +9,17 @@
         android:layout_gravity="top|start"
         android:layout_margin="16dp"
         android:background="#B3000000"
-        android:padding="8dp">
+        android:padding="8dp"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/tvTrackName"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Traseu"
+            android:textColor="#FF6B35"
+            android:textSize="12sp"
+            android:textStyle="bold" />
 
         <TextView
             android:id="@+id/tvTimer"
@@ -21,6 +31,44 @@
             android:textStyle="bold" />
     </LinearLayout>
 
+    <!-- Top Right: Checkpoint indicator -->
+    <LinearLayout
+        android:id="@+id/layoutCheckpoint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_margin="16dp"
+        android:background="#B3000000"
+        android:padding="8dp"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="URMĂTOR"
+            android:textColor="#808080"
+            android:textSize="10sp" />
+
+        <TextView
+            android:id="@+id/tvNextCheckpoint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Checkpoint 1"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvCheckpointDist"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="-- m"
+            android:textColor="#FF6B35"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <!-- Bottom Left: Stats -->
     <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

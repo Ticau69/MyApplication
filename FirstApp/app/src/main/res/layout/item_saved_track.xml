@@ -33,6 +33,13 @@
             android:layout_height="wrap_content"
             android:textColor="#BDBDBD"
             android:textSize="12sp"/>
+        <ImageButton
+            android:id="@+id/btnDeleteTrack"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_delete"
+            android:contentDescription="Șterge traseu" />
     </LinearLayout>
 
     <View

@@ -41,8 +41,16 @@ class TrackRepository(context: Context) {
         return gson.fromJson(json, type)
     }
 
-    fun deleteTrack(id: String) {
-        val tracks = getTracks().filter { it.id != id }
-        prefs.edit().putString("tracks_list", gson.toJson(tracks)).apply()
+    fun deleteTrack(id: String): Boolean {
+        val currentTracks = getTracks()
+        // Filtrăm lista păstrând doar traseele care NU au ID-ul pe care vrem să-l ștergem
+        val filteredTracks = currentTracks.filter { it.id != id }
+
+        // Dacă dimensiunea listei e la fel, înseamnă că nu s-a găsit ID-ul
+        if (currentTracks.size == filteredTracks.size) return false
+
+        // Salvăm noua listă (fără traseul șters) înapoi în SharedPreferences
+        prefs.edit().putString("tracks_list", gson.toJson(filteredTracks)).apply()
+        return true
     }
 }

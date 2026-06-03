@@ -1,11 +1,13 @@
 package com.example.firstapp.history
 
+import android.app.AlertDialog
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.Button
+import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
@@ -43,15 +45,20 @@ class SavedTracksState(
     }
 
     fun setup() {
-        val context = view.context
-        val repo = TrackRepository(context)
-        val tracks = repo.getTracks()
-        val container = view.findViewById<LinearLayout>(R.id.containerSavedTracks)
-
         view.findViewById<Button>(R.id.btnCloseSavedTracks)?.setOnClickListener {
             clearDrawnObjects()
             onStateChange(AppState.CRUISE)
         }
+
+        // Apelăm funcția care populează ecranul
+        loadTracksIntoUI()
+    }
+
+    private fun loadTracksIntoUI() {
+        val context = view.context
+        val repo = TrackRepository(context)
+        val tracks = repo.getTracks()
+        val container = view.findViewById<LinearLayout>(R.id.containerSavedTracks)
 
         container?.removeAllViews()
         val inflater = LayoutInflater.from(context)
@@ -72,6 +79,11 @@ class SavedTracksState(
                 itemView.findViewById<TextView>(R.id.tvTrackCheckpoints).text =
                     context.getString(R.string.checkpoint_count, track.checkpoints.size)
 
+                // Listener pentru butonul de ștergere
+                itemView.findViewById<ImageButton>(R.id.btnDeleteTrack).setOnClickListener {
+                    showDeleteConfirmation(track, repo)
+                }
+
                 // Click pe traseu → îl desenăm pe hartă și centrăm camera
                 itemView.setOnClickListener {
                     selectedTrack = track
@@ -81,6 +93,26 @@ class SavedTracksState(
                 container?.addView(itemView)
             }
         }
+    }
+
+    private fun showDeleteConfirmation(track: Track, repo: TrackRepository) {
+        AlertDialog.Builder(view.context)
+            .setTitle("Ștergere traseu")
+            .setMessage("Ești sigur că vrei să ștergi cursa '${track.name}'?")
+            .setPositiveButton("Șterge") { _, _ ->
+                val success = repo.deleteTrack(track.id)
+                if (success) {
+                    // Dacă traseul șters era tocmai cel pe care ne uitam pe hartă, îl debifăm
+                    if (selectedTrack?.id == track.id) {
+                        clearDrawnObjects()
+                        selectedTrack = null
+                    }
+                    // Reîmprospătăm interfața ca să dispară elementul șters
+                    loadTracksIntoUI()
+                }
+            }
+            .setNegativeButton("Anulează", null)
+            .show()
     }
 
     private fun drawTrack(track: Track) {

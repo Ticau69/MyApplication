@@ -2,8 +2,6 @@ package com.example.firstapp
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -23,26 +21,21 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import android.view.LayoutInflater
-import android.view.ViewGroup
 import com.example.firstapp.history.HistoryState
 import com.example.firstapp.creation.CreationState
 import com.example.firstapp.cruise.CruiseState
 import com.example.firstapp.racing.RacingState
+import com.example.firstapp.racing.TrackRacingState
+import com.example.firstapp.data.Track
+import com.example.firstapp.data.TrackRepository
+import com.example.firstapp.history.SavedTracksState
 import com.example.trackappv2.R
 import com.huawei.hms.maps.MapView
 import com.huawei.hms.maps.MapsInitializer
 import com.huawei.hms.maps.CameraUpdateFactory
 import com.huawei.hms.maps.HuaweiMap
-import com.huawei.hms.maps.model.BitmapDescriptorFactory
 import com.huawei.hms.maps.model.CameraPosition
 import com.huawei.hms.maps.model.LatLng
-import com.huawei.hms.maps.model.Marker
-import com.huawei.hms.maps.model.MarkerOptions
-import com.example.firstapp.data.Track
-import com.example.firstapp.data.TrackRepository
-import androidx.core.graphics.toColorInt
-import androidx.core.graphics.createBitmap
-import com.example.firstapp.history.SavedTracksState
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -64,6 +57,8 @@ fun RaceTrackerApp() {
     var currentLatLng by remember { mutableStateOf<LatLng?>(null) }
     var currentBearing by remember { mutableFloatStateOf(0f) }
     var huaweiMapRef by remember { mutableStateOf<HuaweiMap?>(null) }
+    // Traseul selectat pentru Track Race
+    var selectedTrack by remember { mutableStateOf<Track?>(null) }
 
     var hasLocationPermission by remember {
         mutableStateOf(
@@ -101,7 +96,6 @@ fun RaceTrackerApp() {
 
     if (hasLocationPermission) {
         Box(modifier = Modifier.fillMaxSize()) {
-            // 1. PERSISTENT BACKGROUND MAP
             MapBackground(
                 latLng = currentLatLng,
                 bearing = currentBearing,
@@ -109,14 +103,17 @@ fun RaceTrackerApp() {
                 onMapReady = { huaweiMapRef = it }
             )
 
-
-            // 2. STATE UI OVERLAY
             FSMOverlay(
                 state = currentState,
                 speed = currentSpeed,
                 latLng = currentLatLng,
                 huaweiMap = huaweiMapRef,
-                onStateChange = { currentState = it }
+                selectedTrack = selectedTrack,
+                onStateChange = { currentState = it },
+                onStartTrackRace = { track ->
+                    selectedTrack = track
+                    currentState = AppState.TRACK_RACING
+                }
             )
         }
     } else {
@@ -156,13 +153,14 @@ fun MapBackground(
         }
     }
 
-    // We update the map whenever latLng or bearing changes
     LaunchedEffect(latLng, bearing, huaweiMapInstance, appState) {
         val map = huaweiMapInstance ?: return@LaunchedEffect
         val pos = latLng ?: return@LaunchedEffect
         val cameraPosition = when (appState) {
             AppState.RACE_CREATION -> CameraPosition.Builder()
                 .target(pos).zoom(17f).bearing(0f).tilt(0f).build()
+            AppState.TRACK_RACING -> CameraPosition.Builder()
+                .target(pos).zoom(18f).bearing(bearing).tilt(45f).build()
             else -> CameraPosition.Builder()
                 .target(pos).zoom(18f).bearing(bearing).tilt(45f).build()
         }
@@ -192,11 +190,13 @@ fun FSMOverlay(
     speed: Int,
     latLng: LatLng?,
     huaweiMap: HuaweiMap?,
-    onStateChange: (AppState) -> Unit
+    selectedTrack: Track?,
+    onStateChange: (AppState) -> Unit,
+    onStartTrackRace: (Track) -> Unit
 ) {
-    // Reținem instanțele state — se creează O SINGURĂ DATĂ per tranziție
     val cruiseState = remember(state) { mutableStateOf<CruiseState?>(null) }
     val racingState = remember(state) { mutableStateOf<RacingState?>(null) }
+    val trackRacingState = remember(state) { mutableStateOf<TrackRacingState?>(null) }
     val creationState = remember(state) { mutableStateOf<CreationState?>(null) }
     val historyState = remember(state) { mutableStateOf<HistoryState?>(null) }
     val savedTracksState = remember(state) { mutableStateOf<SavedTracksState?>(null) }
@@ -208,48 +208,70 @@ fun FSMOverlay(
                 val layoutId = when (state) {
                     AppState.CRUISE -> R.layout.fragment_cruise
                     AppState.RACING -> R.layout.fragment_racing
+                    AppState.TRACK_RACING -> R.layout.fragment_racing
                     AppState.RACE_CREATION -> R.layout.fragment_race_creation
                     AppState.HISTORY -> R.layout.fragment_history
                     AppState.SAVED_TRACKS -> R.layout.fragment_saved_tracks
                 }
                 val view = LayoutInflater.from(ctx).inflate(layoutId, null, false)
 
-                // Creăm instanța și o salvăm — factory rulează O SINGURĂ DATĂ
                 when (state) {
                     AppState.CRUISE -> {
-                        cruiseState.value = CruiseState(view, onStateChange).also { it.setup() }
+                        val cs = CruiseState(view, onStateChange, onStartTrackRace)
+                        cruiseState.value = cs
+                        cs.setup()
                     }
                     AppState.RACING -> {
                         racingState.value = RacingState(view, onStateChange)
                     }
+                    AppState.TRACK_RACING -> {
+                        val track = selectedTrack
+                        val map = huaweiMap
+                        if (track != null && map != null) {
+                            trackRacingState.value = TrackRacingState(view, onStateChange, track, map)
+                        }
+                    }
                     AppState.RACE_CREATION -> {
-                        val v = LayoutInflater.from(ctx).inflate(R.layout.fragment_race_creation, null)
-                        creationState.value = CreationState(v, onStateChange, scope)
-                        huaweiMap?.let { creationState.value?.setup(it) }
-                        v
+                        val cs = CreationState(view, onStateChange, scope)
+                        creationState.value = cs
+                        huaweiMap?.let { cs.setup(it) }
                     }
                     AppState.HISTORY -> {
-                        historyState.value = HistoryState(view, onStateChange).also { it.setup() }
+                        val hs = HistoryState(view, onStateChange)
+                        historyState.value = hs
+                        hs.setup()
                     }
                     AppState.SAVED_TRACKS -> {
-                        savedTracksState.value = SavedTracksState(view, onStateChange, huaweiMap)
-                            .also { it.setup() }
+                        val sts = SavedTracksState(view, onStateChange, huaweiMap)
+                        savedTracksState.value = sts
+                        sts.setup()
                     }
                 }
                 view
             },
             modifier = Modifier.fillMaxSize(),
             update = { _ ->
-                // Dacă harta a venit după ce view-ul a fost creat
+                // Locație → CruiseState pentru detectare proximitate
+                if (state == AppState.CRUISE) {
+                    huaweiMap?.let { map ->
+                        cruiseState.value?.let { cs ->
+                            if (!cs.isMapSet) cs.setMap(map) // Pompăm harta către CruiseState
+                        }
+                    }
+                }
+
                 if (state == AppState.RACE_CREATION) {
                     huaweiMap?.let { map ->
                         creationState.value?.let { cs ->
-                            if (cs.huaweiMap == null) cs.setup(map) // ← asta poate rula repetat!
+                            if (cs.huaweiMap == null) cs.setup(map)
                         }
                     }
                 }
                 if (state == AppState.RACING) {
                     racingState.value?.update(speed, latLng)
+                }
+                if (state == AppState.TRACK_RACING) {
+                    trackRacingState.value?.update(speed, latLng)
                 }
                 if (state == AppState.SAVED_TRACKS) {
                     huaweiMap?.let { map ->
@@ -264,5 +286,5 @@ fun FSMOverlay(
 }
 
 enum class AppState {
-    CRUISE, RACING, RACE_CREATION, HISTORY, SAVED_TRACKS
+    CRUISE, RACING, TRACK_RACING, RACE_CREATION, HISTORY, SAVED_TRACKS
 }

@@ -121,17 +121,22 @@ class CreationState(
             val destination = points.last()
             val waypoints = if (points.size > 2) points.subList(1, points.size - 1) else emptyList()
 
+            // getRoutedPoints folosește Driving API pentru a găsi drumul optim pe străzi între markeri
             val routedPoints = RouteHelper.getRoutedPoints(origin, destination, waypoints)
 
             // Înapoi pe main thread pentru UI
             withContext(kotlinx.coroutines.Dispatchers.Main) {
                 creationPolyline?.remove()
+                lastRoutedPoints = routedPoints
                 if (routedPoints.size >= 2) {
                     creationPolyline = huaweiMap?.addPolyline(
                         com.huawei.hms.maps.model.PolylineOptions()
                             .addAll(routedPoints)
                             .color(android.graphics.Color.parseColor("#FF6B35"))
-                            .width(6f)
+                            .width(8f)  // mai gros
+                            .jointType(com.huawei.hms.maps.model.JointType.ROUND)
+                            .startCap(com.huawei.hms.maps.model.RoundCap())
+                            .endCap(com.huawei.hms.maps.model.RoundCap())
                     )
                 }
             }
@@ -154,7 +159,7 @@ class CreationState(
             MarkerOptions()
                 .position(latLng)
                 .icon(BitmapDescriptorFactory.fromBitmap(bitmap))
-                .anchor(0.5f, 1f) // ancorat jos-centru ca un pin clasic
+                .anchorMarker(0.5f, 1f) // ancorat jos-centru ca un pin clasic
         )
     }
 
