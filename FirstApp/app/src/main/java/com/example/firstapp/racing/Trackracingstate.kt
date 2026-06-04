@@ -6,27 +6,41 @@ import android.graphics.Canvas
 import android.graphics.Color
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.createBitmap
+import androidx.core.graphics.toColorInt
 import com.example.firstapp.AppState
+import com.example.firstapp.AppViewModel
+import com.example.firstapp.data.LapData
+import com.example.firstapp.data.RaceType
+import com.example.firstapp.data.RunData
+import com.example.firstapp.data.SplitData
 import com.example.firstapp.data.Track
 import com.example.trackappv2.R
 import com.huawei.hms.maps.HuaweiMap
 import com.huawei.hms.maps.model.BitmapDescriptorFactory
+import com.huawei.hms.maps.model.JointType
 import com.huawei.hms.maps.model.LatLng
 import com.huawei.hms.maps.model.Marker
 import com.huawei.hms.maps.model.MarkerOptions
 import com.huawei.hms.maps.model.Polyline
 import com.huawei.hms.maps.model.PolylineOptions
-import com.huawei.hms.maps.model.JointType
 import com.huawei.hms.maps.model.RoundCap
+import java.util.Locale
 
 class TrackRacingState(
     private val context: Context,
     private val onStateChange: (AppState) -> Unit,
     private val track: Track,
-    private val huaweiMap: HuaweiMap
+    private val huaweiMap: HuaweiMap,
+    private val bestRun: RunData? = null,  // ← pentru delta splits
+    private val onRaceFinished: (AppViewModel.RaceFinishData) -> Unit,
+    private val onSplitRecorded: (SplitData) -> Unit,
+    private val onLapCompleted: (LapData) -> Unit
 ) {
-    val session = QuickRaceSession()
+    val session = RaceSession(track.raceType)
+    val lapTimer = LapTimer()  // ← adaugă
     private var isInitialized = false
+    private var lapCount = 0
+    private var passedCheckpoints = 0
 
     // Polilinii pe hartă
     private var trackPolyline: Polyline? = null
@@ -36,16 +50,29 @@ class TrackRacingState(
     private val drawnMarkers = mutableListOf<Marker>()
 
     // Checkpoint tracking
-    private val checkpoints: List<LatLng>
+    private val checkpoints: List<LatLng> = buildList {
+        add(track.start.toLatLng())
+        addAll(track.checkpoints.map { it.toLatLng() })
+        add(track.finish.toLatLng())
+    }
     private var nextCheckpointIndex = 0
     private val CHECKPOINT_RADIUS_M = 30f
 
-    init {
-        checkpoints = buildList {
-            add(track.start.toLatLng())
-            addAll(track.checkpoints.map { it.toLatLng() })
-            add(track.finish.toLatLng())
+    private val checkpointNames: List<String> = buildList {
+        add("Start")
+        track.checkpoints.forEachIndexed { i, _ -> add("CP ${i + 1}") }
+        add("Finish")
+    }
+
+    val progressFraction: Float
+        get() = when (track.raceType) {
+            RaceType.SPRINT -> session.sprintProgress
+            RaceType.LAP_RACE -> 0f // Progresul în lap race e altfel calculat
         }
+
+    val totalCheckpoints = checkpoints.size
+
+    init {
         drawSavedTrack()
     }
 
@@ -63,7 +90,7 @@ class TrackRacingState(
         trackPolyline = huaweiMap.addPolyline(
             PolylineOptions()
                 .addAll(points)
-                .color(Color.parseColor("#991976D2"))
+                .color("#991976D2".toColorInt())
                 .width(10f)
                 .jointType(JointType.ROUND)
                 .startCap(RoundCap())
@@ -72,7 +99,7 @@ class TrackRacingState(
 
         gpsTrailPolyline = huaweiMap.addPolyline(
             PolylineOptions()
-                .color(Color.parseColor("#FFFF6B35"))
+                .color("#FFFF6B35".toColorInt())
                 .width(6f)
                 .jointType(JointType.ROUND)
                 .startCap(RoundCap())
@@ -114,14 +141,13 @@ class TrackRacingState(
         if (!isInitialized) {
             session.start()
             isInitialized = true
-            nextCheckpointIndex = 1
+            nextCheckpointIndex = 0
         }
 
         latLng?.let { pos ->
-            session.update(speed, pos)
+            session.update(speed, pos, totalCheckpoints, passedCheckpoints)
             gpsTrailPoints.add(pos)
             gpsTrailPolyline?.points = gpsTrailPoints.toList()
-
             checkCheckpointProximity(pos)
         }
     }
@@ -132,48 +158,70 @@ class TrackRacingState(
         val nextCp = checkpoints[nextCheckpointIndex]
         val dist = distanceBetween(pos, nextCp)
 
-        if (dist <= CHECKPOINT_RADIUS_M) {
-            nextCheckpointIndex++
+        if (dist > CHECKPOINT_RADIUS_M) return
 
-            if (nextCheckpointIndex >= checkpoints.size) {
-                onFinishReached()
+        val isFinish = nextCheckpointIndex == checkpoints.size - 1
+        val isStart = nextCheckpointIndex == 0
+
+        // Înregistrăm split pentru orice checkpoint
+        val split = session.recordSplit(
+            checkpointIndex = nextCheckpointIndex,
+            checkpointName = checkpointNames[nextCheckpointIndex],
+            bestRun = bestRun
+        )
+        passedCheckpoints++
+        onSplitRecorded(split)
+
+        when (track.raceType) {
+            RaceType.SPRINT -> {
+                nextCheckpointIndex++
+                if (isFinish) onFinishReached()
+            }
+            RaceType.LAP_RACE -> {
+                if (isFinish && !isStart) {
+                    // Tur complet
+                    val lap = session.recordLap()
+                    onLapCompleted(lap)
+                    // Resetăm pentru turul următor
+                    nextCheckpointIndex = 1
+                    passedCheckpoints = 1
+                } else {
+                    nextCheckpointIndex++
+                }
             }
         }
     }
 
     private fun onFinishReached() {
+        val runData = session.buildRunData(1)
         saveRaceRecord()
-
-        android.app.AlertDialog.Builder(context)
-            .setTitle("🏁 Finish!")
-            .setMessage(
-                "Timp: ${formatTime(session.getDurationSeconds())}\n" +
-                        "Viteză max: ${session.maxSpeed} km/h\n" +
-                        "Distanță: ${String.format("%.2f", session.getDistanceKm())} km"
+        onRaceFinished(
+            AppViewModel.RaceFinishData(
+                durationSeconds = session.currentTimeMs / 1000,
+                maxSpeed = session.currentMaxSpeed,
+                distanceKm = session.getTotalDistanceKm(),
+                splits = session.splits,
+                raceType = track.raceType
             )
-            .setPositiveButton("OK") { _, _ ->
-                cleanup()
-                onStateChange(AppState.CRUISE)
-            }
-            .setCancelable(false)
-            .show()
+        )
+        cleanup()
     }
 
     private fun formatTime(totalSecs: Long): String {
         val mins = totalSecs / 60
         val secs = totalSecs % 60
-        return String.format("%02d:%02d", mins, secs)
+        return String.format(Locale.getDefault(), "%02d:%02d", mins, secs)
     }
 
     private fun saveRaceRecord() {
         val manager = HistoryManager(context)
-        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
         val record = RaceRecord(
             id = java.util.UUID.randomUUID().toString(),
             date = sdf.format(java.util.Date()),
             maxSpeed = session.maxSpeed,
-            distanceKm = session.getDistanceKm(),
-            durationSeconds = session.getDurationSeconds()
+            distanceKm = session.getTotalDistanceKm(),
+            durationSeconds = session.currentTimeMs / 1000
         )
         manager.saveRace(record)
     }

@@ -21,6 +21,7 @@ import com.huawei.hms.maps.model.PolylineOptions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -33,13 +34,15 @@ class CruiseState(
     var isMapSet = false
         private set
 
+    private val job = SupervisorJob()
+    private val scope = CoroutineScope(Dispatchers.Main + job)
+
     private val trackMarkers = mutableMapOf<Marker, Track>()
     private var focusPolyline: Polyline? = null
     private var focusedTrack: Track? = null
 
     // Coroutine pentru timerul de 10 secunde
     private var focusJob: Job? = null
-    private val scope = CoroutineScope(Dispatchers.Main)
 
     // Funcție apelată din MainActivity când harta a fost încărcată
     fun setMap(map: HuaweiMap) {
@@ -161,5 +164,10 @@ class CruiseState(
         val canvas = Canvas(bitmap)
         vectorDrawable.draw(canvas)
         return BitmapDescriptorFactory.fromBitmap(bitmap)
+    }
+
+    fun onDestroy() {
+        exitFocusMode()
+        job.cancel()
     }
 }

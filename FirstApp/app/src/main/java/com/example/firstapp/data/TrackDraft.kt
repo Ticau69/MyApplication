@@ -12,7 +12,8 @@ data class Waypoint(
 data class TrackDraft(
     var start: Waypoint? = null,
     val checkpoints: MutableList<Waypoint> = mutableListOf(),
-    var finish: Waypoint? = null
+    var finish: Waypoint? = null,
+    var raceType: RaceType = RaceType.SPRINT
 ) {
     val isValid: Boolean
         get() = start != null && finish != null

@@ -11,6 +11,7 @@ composeBom = "2026.02.01"
 agconnect = "1.9.5.302"
 animation = "1.11.2"
 animationCore = "1.11.2"
+foundationLayout = "1.11.2"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -31,6 +32,7 @@ android-gradle-plugin = { group = "com.android.tools.build", name = "gradle", ve
 huawei-agconnect-agcp = { group = "com.huawei.agconnect", name = "agcp", version.ref = "agconnect" }
 androidx-compose-animation = { group = "androidx.compose.animation", name = "animation", version.ref = "animation" }
 androidx-compose-animation-core = { group = "androidx.compose.animation", name = "animation-core", version.ref = "animationCore" }
+androidx-compose-foundation-layout = { group = "androidx.compose.foundation", name = "foundation-layout", version.ref = "foundationLayout" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -20,6 +20,10 @@ import com.huawei.hms.maps.model.Marker
 import com.huawei.hms.maps.model.MarkerOptions
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 
 class CreationState(
     private val context: Context, // Modificat din View în Context
@@ -33,7 +37,7 @@ class CreationState(
 
     // Default mode
     private var selectedType: WaypointType = WaypointType.START
-    private val trackDraft = TrackDraft()
+    val trackDraft = TrackDraft() // Schimbat în val public pentru a accesa raceType din UI
 
     // Reținem markerii ca să îi putem înlocui
     private var startMarker: Marker? = null
@@ -51,6 +55,10 @@ class CreationState(
         Toast.makeText(context, "Mod plasare: ${type.name}", Toast.LENGTH_SHORT).show()
     }
 
+    fun setRaceType(type: com.example.firstapp.data.RaceType) {
+        trackDraft.raceType = type
+    }
+
     // Funcție apelată din Jetpack Compose când apeși "Salvează Traseu"
     fun initiateSave() {
         if (trackDraft.isValid) {
@@ -63,6 +71,28 @@ class CreationState(
     private fun setupMapClickListener() {
         huaweiMap?.setOnMapClickListener { latLng ->
             placeWaypoint(latLng)
+        }
+    }
+
+    private fun triggerTactileClick() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+                val vibrator = vibratorManager.defaultVibrator
+                // EFFECT_CLICK oferă o vibrație premium, ascuțită, ca a unei rotițe fizice
+                vibrator.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK))
+            } else {
+                @Suppress("DEPRECATION")
+                val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    vibrator.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK))
+                } else {
+                    @Suppress("DEPRECATION")
+                    vibrator.vibrate(40) // Fallback pentru versiuni foarte vechi de Android
+                }
+            }
+        } catch (e: Exception) {
+            // Ignorăm în caz de restricții de sistem
         }
     }
 
@@ -94,6 +124,7 @@ class CreationState(
     }
 
     private fun placeWaypoint(latLng: LatLng) {
+        triggerTactileClick()
         val waypoint = Waypoint(latLng, selectedType)
 
         when (selectedType) {

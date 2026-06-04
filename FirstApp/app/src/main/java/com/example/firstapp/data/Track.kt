@@ -2,6 +2,11 @@ package com.example.firstapp.data
 
 import com.huawei.hms.maps.model.LatLng
 
+enum class RaceType {
+    SPRINT,    // A→B, un singur traseu, fără revenire la start
+    LAP_RACE   // Circuit, treci prin Start/Finish de mai multe ori
+}
+
 data class Track(
     val id: String,
     val name: String,
@@ -9,7 +14,8 @@ data class Track(
     val start: SerializableLatLng,
     val checkpoints: List<SerializableLatLng>,
     val finish: SerializableLatLng,
-    val routedPoints: List<SerializableLatLng> = emptyList()
+    val routedPoints: List<SerializableLatLng> = emptyList(),
+    val raceType: RaceType = RaceType.SPRINT  // ← default Sprint
 )
 
 // LatLng nu e serializabil direct cu Gson, folosim wrapper

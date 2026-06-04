@@ -2,7 +2,6 @@ package com.example.firstapp.racing
 
 import android.content.Context
 import com.example.firstapp.AppState
-import com.example.firstapp.racing.RaceRecord
 
 class RacingState(
     private val context: Context,

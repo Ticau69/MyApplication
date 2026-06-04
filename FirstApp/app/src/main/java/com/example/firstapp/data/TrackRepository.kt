@@ -1,6 +1,7 @@
 package com.example.firstapp.data
 
 import android.content.Context
+import androidx.core.content.edit
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.huawei.hms.maps.model.LatLng
@@ -31,7 +32,7 @@ class TrackRepository(context: Context) {
 
         val tracks = getTracks().toMutableList()
         tracks.add(0, track)
-        prefs.edit().putString("tracks_list", gson.toJson(tracks)).apply()
+        prefs.edit { putString("tracks_list", gson.toJson(tracks)) }
         return true
     }
 

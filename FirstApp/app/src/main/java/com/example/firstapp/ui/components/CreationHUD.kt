@@ -1,7 +1,18 @@
 package com.example.firstapp.ui.components
 
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -12,6 +23,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.firstapp.data.RaceType
 
 @Composable
 fun CreationHUD(
@@ -20,7 +32,9 @@ fun CreationHUD(
     onAddFinish: () -> Unit,
     onSaveTrack: () -> Unit,
     onCancel: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    selectedRaceType: RaceType = RaceType.SPRINT,
+    onRaceTypeChanged: (RaceType) -> Unit,
 ) {
     Box(
         modifier = modifier.fillMaxSize()
@@ -63,6 +77,26 @@ fun CreationHUD(
                 VelocityPrimaryButton(text = "Finish", onClick = onAddFinish)
             }
 
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(CutCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                    .padding(4.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                RaceTypeChip(
+                    label = "SPRINT",
+                    selected = selectedRaceType == RaceType.SPRINT,
+                    onClick = { onRaceTypeChanged(RaceType.SPRINT) }
+                )
+                RaceTypeChip(
+                    label = "LAP RACE",
+                    selected = selectedRaceType == RaceType.LAP_RACE,
+                    onClick = { onRaceTypeChanged(RaceType.LAP_RACE) }
+                )
+            }
+
             Spacer(modifier = Modifier.height(12.dp))
 
             // Rândul 2: Checkpoints și Salvare
@@ -82,5 +116,29 @@ fun CreationHUD(
                 modifier = Modifier.fillMaxWidth()
             )
         }
+    }
+}
+
+@Composable
+fun RaceTypeChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(CutCornerShape(6.dp))
+            .background(
+                if (selected) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.surface
+            )
+            .clickable { onClick() }
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            fontStyle = FontStyle.Italic,
+            fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Normal,
+            color = if (selected) MaterialTheme.colorScheme.onPrimary
+            else MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
