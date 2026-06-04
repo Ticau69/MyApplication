@@ -2,12 +2,14 @@ package com.example.firstapp.racing
 
 import android.content.Context
 import com.example.firstapp.AppState
+import com.example.firstapp.data.RaceType
 
 class RacingState(
     private val context: Context,
     private val onStateChange: (AppState) -> Unit
 ) {
-    val session = QuickRaceSession()
+    // Înlocuim QuickRaceSession cu noul motor, folosind SPRINT ca bază
+    val session = RaceSession(RaceType.SPRINT)
     private var isInitialized = false
 
     fun update(speed: Int, latLng: com.huawei.hms.maps.model.LatLng?) {
@@ -16,7 +18,10 @@ class RacingState(
             isInitialized = true
         }
 
-        latLng?.let { session.update(speed, it) }
+        latLng?.let {
+            // Cursă liberă, deci dăm 0 la punctele de control
+            session.update(speed, it, totalCheckpoints = 0, passedCheckpoints = 0)
+        }
     }
 
     fun stop() {
@@ -32,8 +37,8 @@ class RacingState(
             id = java.util.UUID.randomUUID().toString(),
             date = sdf.format(java.util.Date()),
             maxSpeed = session.maxSpeed,
-            distanceKm = session.getDistanceKm(),
-            durationSeconds = session.getDurationSeconds()
+            distanceKm = session.getTotalDistanceKm(),       // Metoda corectă din RaceSession
+            durationSeconds = session.currentTimeMs / 1000   // Metoda corectă din RaceSession
         )
         manager.saveRace(record)
     }

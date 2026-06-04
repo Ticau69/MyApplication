@@ -37,9 +37,7 @@ class TrackRacingState(
     private val onLapCompleted: (LapData) -> Unit
 ) {
     val session = RaceSession(track.raceType)
-    val lapTimer = LapTimer()  // ← adaugă
     private var isInitialized = false
-    private var lapCount = 0
     private var passedCheckpoints = 0
 
     // Polilinii pe hartă

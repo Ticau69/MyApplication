@@ -63,6 +63,7 @@ import com.example.firstapp.creation.CreationState
 import com.example.firstapp.cruise.CruiseState
 import com.example.firstapp.data.Track
 import com.example.firstapp.history.SavedTracksState
+import com.example.firstapp.racing.RaceSession
 import com.example.firstapp.racing.RacingState
 import com.example.firstapp.racing.TrackRacingState
 import com.example.firstapp.service.LocationForegroundService
@@ -91,16 +92,42 @@ import com.huawei.hms.maps.model.MarkerOptions
 import kotlinx.coroutines.delay
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
+        // --- NOU: Forțăm harta să se ducă până în marginile fizice ---
+        window.navigationBarColor = android.graphics.Color.TRANSPARENT
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
         MapsInitializer.setApiKey(BuildConfig.HUAWEI_MAP_API_KEY)
         MapsInitializer.initialize(this)
-        enableEdgeToEdge()
+
+        // ATENȚIE: ȘTERGE linia "enableEdgeToEdge()" dacă o mai ai aici,
+        // pentru că intră în conflict cu modul Immersive manual.
+
         setContent {
-            RaceTrackerApp()
+            com.example.firstapp.ui.theme.FirstAppTheme(darkTheme = true) {
+                RaceTrackerApp()
+            }
+        }
+    }
+
+    // --- NOU: Această funcție blochează apariția barelor la click pe hartă ---
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            val controller = WindowCompat.getInsetsController(window, window.decorView)
+            // Barele vor apărea DOAR dacă faci swipe din marginea ecranului
+            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            // Ascundem tot (Status Bar + Navigation Bar)
+            controller.hide(WindowInsetsCompat.Type.systemBars())
         }
     }
 
@@ -468,8 +495,15 @@ fun MapBackground(
                 try {
                     val style = MapStyleOptions.loadRawResourceStyle(context, R.raw.mapstyle_night)
                     hMap.setMapStyle(style)
+
+                    // Oprim locația default
                     hMap.isMyLocationEnabled = false
                     hMap.uiSettings.isMyLocationButtonEnabled = false
+
+                    // --- NOU: Ascundem elementele default de UI (Plus/Minus și Busola) ---
+                    hMap.uiSettings.isZoomControlsEnabled = false // Ascunde butoanele de + și -
+                    hMap.uiSettings.isCompassEnabled = false      // Ascunde busola
+
                 } catch (_: SecurityException) {}
             }
             mapView
@@ -557,7 +591,9 @@ fun FSMOverlay(
                 onSplitRecorded = { split -> viewModel.onSplitRecorded(split) },
                 onLapCompleted = { lap ->
                     val logic = trackRacingLogic.value ?: return@TrackRacingState
-                    viewModel.onLapCompleted(lap, logic.lapTimer.laps)
+                    // Aici era eroarea (foloseai logic.RaceSession sau lapTimer)
+                    // Corect este logic.session.laps
+                    viewModel.onLapCompleted(lap, logic.session.laps)
                 }
             )
         }
@@ -565,9 +601,10 @@ fun FSMOverlay(
 
     LaunchedEffect(state) {
         while (state == AppState.TRACK_RACING) {
-            delay(100.milliseconds) // Update la 100ms pentru precizie
+            delay(100.milliseconds)
             trackRacingLogic.value?.let { logic ->
-                viewModel.updateLapTime(logic.lapTimer.currentLapTimeMs)
+                // Corect este logic.session.currentLapTimeMs
+                viewModel.updateLapTime(logic.session.currentLapTimeMs)
                 viewModel.updateSprintProgress(logic.progressFraction)
             }
         }

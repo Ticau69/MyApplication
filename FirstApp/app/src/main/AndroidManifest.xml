@@ -44,6 +44,7 @@
         <meta-data
         android:name="com.huawei.hms.client.appid"
         android:value="appid=6917606847435409166"/>
+        <meta-data android:name="android.notch_support" android:value="true"/>
     </application>
 
 </manifest>
