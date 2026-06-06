@@ -1,41 +1,26 @@
 package com.example.firstapp.ui.components
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.CutCornerShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.firstapp.AppViewModel
@@ -44,368 +29,307 @@ import com.example.firstapp.data.RaceType
 import com.example.firstapp.data.SplitData
 import com.example.firstapp.data.Track
 import com.example.firstapp.ui.theme.BrakeRed
+import com.example.firstapp.ui.theme.FirstAppTheme
 import com.huawei.hms.maps.model.LatLng
+
+val maxG = 2f
+
+
 
 @Composable
 fun RacingHUD(
     speed: Int,
     currentLatLng: LatLng?,
     selectedTrack: Track?,
+    currentLapTimeMs: Long,
+    lastLapNotification: AppViewModel.LapNotification?,
+    allLaps: List<LapData>,
+    currentSplit: SplitData?,
+    sprintProgress: Float,
     onStopClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    currentLapTimeMs: Long = 0L,
-    lastLapNotification: AppViewModel.LapNotification? = null,
-    allLaps: List<LapData> = emptyList(),
-    currentSplit: SplitData? = null,
-    sprintProgress: Float = 0f
+    gForceX: Float = 0f, // NOU
+    gForceY: Float = 0f, // NOU
+    modifier: Modifier = Modifier
 ) {
-    // 1. Calculăm constant dacă mașina a ieșit de pe traseu
-    val isOffTrack by remember(currentLatLng, selectedTrack) {
-        derivedStateOf {
-            calculateOffTrackStatus(currentLatLng, selectedTrack, thresholdMeters = 50f)
-        }
-    }
+    // Formatăm timpul în MM:SS.CC
+    val mins = currentLapTimeMs / 60000
+    val secs = (currentLapTimeMs % 60000) / 1000
+    val millis = (currentLapTimeMs % 1000) / 10
+    val timeString = String.format("%02d:%02d.%02d", mins, secs, millis)
 
-    // 2. Animația pentru alerta vizuală (Edge Glow)
-    val infiniteTransition = rememberInfiniteTransition(label = "glow")
-    val glowAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.2f,
-        targetValue = 0.9f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(400, easing = LinearEasing), // Pulsare rapidă, agresivă
-            repeatMode = RepeatMode.Reverse
-        ), label = "alpha"
-    )
+    val raceType = selectedTrack?.raceType ?: RaceType.SPRINT
+    val currentLap = (allLaps.size + 1)
 
     Box(modifier = modifier.fillMaxSize()) {
-        // --- ALERTĂ EDGE GLOW ---
-        if (isOffTrack) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .border(12.dp, BrakeRed.copy(alpha = glowAlpha)) // O margine groasă, translucidă
-            )
 
-            // Text de avertizare plasat sus
-            Text(
-                text = "OFF TRACK",
-                color = BrakeRed.copy(alpha = glowAlpha),
-                fontWeight = FontWeight.Black,
-                fontSize = 24.sp,
-                letterSpacing = 4.sp,
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 16.dp)
-            )
-        }
-
-        if (selectedTrack?.raceType == RaceType.SPRINT) {
-            Column(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 16.dp)
-                    .fillMaxWidth(0.7f)
-                    .clip(CutCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp))
-                    .background(
-                        MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.85f)
-                    )
-                    .padding(horizontal = 24.dp, vertical = 12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // Timp total
-                Text(
-                    text = formatLapTime(currentLapTimeMs),
-                    fontSize = 36.sp,
-                    fontWeight = FontWeight.Black,
-                    fontStyle = FontStyle.Italic,
-                    color = MaterialTheme.colorScheme.primary
+        // ==========================================
+        // 1. ZONA SUS-STÂNGA: Cronometrul (Timp Total)
+        // ==========================================
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(top = 32.dp, start = 16.dp)
+                .background(
+                    MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.85f),
+                    CutCornerShape(bottomEnd = 16.dp)
                 )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Progress bar
-                LinearProgressIndicator(
-                    progress = { sprintProgress },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(6.dp)
-                        .clip(RoundedCornerShape(3.dp)),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                .border(
+                    1.dp,
+                    MaterialTheme.colorScheme.outlineVariant,
+                    CutCornerShape(bottomEnd = 16.dp)
                 )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Text(
-                    text = "${(sprintProgress * 100).toInt()}% completat",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                .padding(horizontal = 20.dp, vertical = 12.dp)
+        ) {
+            Column(horizontalAlignment = Alignment.Start) {
+                Text("TIME", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                Text(timeString, color = MaterialTheme.colorScheme.onSurface, fontSize = 24.sp, fontWeight = FontWeight.Black, fontStyle = FontStyle.Italic)
             }
         }
 
-        if (selectedTrack?.raceType == RaceType.LAP_RACE) {
-            Column(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 16.dp)
-                    .clip(CutCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp))
-                    .background(MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.85f))
-                    .padding(horizontal = 24.dp, vertical = 12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // Număr tur curent
-                Text(
-                    text = "TUR ${(allLaps.size + 1)}",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    letterSpacing = 2.sp
-                )
-
-                // Timp tur curent
-                Text(
-                    text = formatLapTime(currentLapTimeMs),
-                    fontSize = 36.sp,
-                    fontWeight = FontWeight.Black,
-                    fontStyle = FontStyle.Italic,
-                    color = MaterialTheme.colorScheme.primary
-                )
-
-                // Delta față de best lap
-                val bestLapMs = allLaps.minByOrNull { it.lapTimeMs }?.lapTimeMs
-                if (bestLapMs != null && allLaps.isNotEmpty()) {
-                    val delta = currentLapTimeMs - bestLapMs
-                    val deltaColor = if (delta <= 0) Color(0xFF00E676) else BrakeRed
-                    val deltaPrefix = if (delta <= 0) "-" else "+"
-
-                    Text(
-                        text = "$deltaPrefix${formatLapTime(kotlin.math.abs(delta))}",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = deltaColor,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-        }
-
-        lastLapNotification?.let { notification ->
-            LapCompletedBanner(
-                notification = notification,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(top = 16.dp, start = 16.dp)
-            )
-        }
-
-        currentSplit?.let { split ->
-            SplitBanner(
-                split = split,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(top = 16.dp, start = 16.dp)
-            )
-        }
-
-        if (allLaps.isNotEmpty()) {
-            LazyColumn(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 16.dp, end = 16.dp)
-                    .widthIn(max = 160.dp)
-                    .heightIn(max = 200.dp)
-                    .clip(CutCornerShape(8.dp))
-                    .background(
-                        MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.7f)
-                    )
-                    .padding(8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                items(allLaps.reversed()) { lap ->
-                    val isBest = lap.lapTimeMs == allLaps.minOf { it.lapTimeMs }
-                    LapRowItem(lap = lap, isBest = isBest)
-                }
-            }
-        }
-
-        // --- TELEMETRIE (Vitezometru) ---
+        // ==========================================
+        // 2. ZONA SUS-CENTRU: Vitezometrul Tactic
+        // ==========================================
         Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .padding(top = if (isOffTrack) 64.dp else 48.dp) // Împingem puțin în jos dacă e alertă
-                .clip(CutCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.85f))
-                .padding(horizontal = 48.dp, vertical = 24.dp),
+                .padding(top = 24.dp)
+                .background(
+                    MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.9f),
+                    CutCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp)
+                )
+                .border(
+                    1.dp,
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                    CutCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp)
+                )
+                .padding(horizontal = 40.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
                 text = speed.toString(),
-                fontSize = 80.sp,
+                color = MaterialTheme.colorScheme.primary, // Folosim VoltBlue pentru vizibilitate agresivă
+                fontSize = 50.sp,
                 fontWeight = FontWeight.Black,
-                color = MaterialTheme.colorScheme.primary,
-                fontStyle = FontStyle.Italic // Respectăm designul "Velocity"
+                fontStyle = FontStyle.Italic,
+                letterSpacing = (2).sp
             )
             Text(
                 text = "KM/H",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 2.sp
             )
         }
 
-        // --- BUTON OPRIRE ---
-        VelocityPrimaryButton(
-            text = "OPREȘTE CURSA",
-            onClick = onStopClick,
-            isDestructive = true,
+        // ==========================================
+        // 3. ZONA SUS-DREAPTA: Progres Traseu / Lap-uri
+        // ==========================================
+        Box(
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 48.dp)
-                .fillMaxWidth(0.8f)
-        )
-    }
-}
+                .align(Alignment.TopEnd)
+                .padding(top = 32.dp, end = 16.dp)
+                .background(
+                    MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.85f),
+                    CutCornerShape(bottomStart = 16.dp)
+                )
+                .border(
+                    1.dp,
+                    MaterialTheme.colorScheme.outlineVariant,
+                    CutCornerShape(bottomStart = 16.dp)
+                )
+                .padding(horizontal = 20.dp, vertical = 12.dp)
+        ) {
+            Column(horizontalAlignment = Alignment.End) {
+                if (raceType == RaceType.LAP_RACE) {
+                    Text("LAP", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                    Text(currentLap.toString(), color = MaterialTheme.colorScheme.onSurface, fontSize = 24.sp, fontWeight = FontWeight.Black, fontStyle = FontStyle.Italic)
+                } else {
+                    val percentage = (sprintProgress * 100).toInt().coerceIn(0, 100)
+                    Text("PROGRESS", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                    Text("$percentage%", color = MaterialTheme.colorScheme.onSurface, fontSize = 24.sp, fontWeight = FontWeight.Black, fontStyle = FontStyle.Italic)
+                }
+            }
+        }
 
-@Composable
-fun SplitBanner(
-    split: SplitData,
-    modifier: Modifier = Modifier
-) {
-    val deltaColor = when {
-        split.deltaVsBestMs == null -> MaterialTheme.colorScheme.primary
-        split.deltaVsBestMs <= 0 -> Color(0xFF00E676)  // Verde — mai rapid
-        else -> BrakeRed                                 // Roșu — mai lent
-    }
+        // ==========================================
+        // 4. ZONA JOS-STÂNGA: Buton Oprire Urgență/Finish
+        // ==========================================
+        if(selectedTrack == null) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(start = 0.dp, bottom = 32.dp)
+            ) {
+                Button(
+                    onClick = onStopClick,
+                    shape = CutCornerShape(topStart = 56.dp, bottomEnd = 56.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = BrakeRed,
+                        contentColor = Color.White
+                    ),
+                    contentPadding = PaddingValues(horizontal = 64.dp, vertical = 16.dp)
+                ) {
+                    Text(
+                        "OPREȘTE CURSA",
+                        fontWeight = FontWeight.Black,
+                        fontSize = 12.sp,
+                        letterSpacing = 1.sp
+                    )
+                }
+            }
+        }
+        // ==========================================
+        // 5. ZONA JOS-DREAPTA: Grafic G-Meter (Placeholder vizual)
+        // ==========================================
 
-    val deltaText = split.deltaVsBestMs?.let { delta ->
-        val prefix = if (delta <= 0) "-" else "+"
-        "$prefix${formatLapTime(kotlin.math.abs(delta))}"
-    }
 
-    Column(
-        modifier = modifier
-            .clip(CutCornerShape(topEnd = 16.dp, bottomEnd = 16.dp))
-            .background(deltaColor.copy(alpha = 0.9f))
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-    ) {
-        Text(
-            text = split.checkpointName.uppercase(),
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.ExtraBold,
-            color = Color.Black,
-            letterSpacing = 1.sp
-        )
-        Text(
-            text = formatLapTime(split.splitTimeMs),
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Black,
-            fontStyle = FontStyle.Italic,
-            color = Color.Black
-        )
-        deltaText?.let {
-            Text(
-                text = it,
-                style = MaterialTheme.typography.labelLarge,
-                color = Color.Black.copy(alpha = 0.7f)
-            )
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 16.dp, bottom = 32.dp)
+                .size(100.dp) // Dimensiunea cadranului G-Meter
+                .background(
+                    MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.85f),
+                    CircleShape
+                )
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                .clip(CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            // Desenăm interfața G-Meter-ului direct cu Canvas
+            val gridColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+            val accentColor = MaterialTheme.colorScheme.primary
+
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val center = Offset(size.width / 2, size.height / 2)
+                val radius = size.width / 2
+
+                val clampedX = gForceX.coerceIn(-maxG, maxG)
+                val clampedY = gForceY.coerceIn(-maxG, maxG)
+
+                val dotCenter = Offset(
+                    x = center.x + (clampedX / maxG) * radius,
+                    y = center.y - (clampedY / maxG) * radius
+                )
+
+                // Cercurile concentrice (1G, 2G etc.)
+                drawCircle(color = gridColor, radius = radius * 0.33f, center = center, style = Stroke(width = 2f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f))))
+                drawCircle(color = gridColor, radius = radius * 0.66f, center = center, style = Stroke(width = 2f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f))))
+
+                // Axele X și Y
+                drawLine(color = gridColor, start = Offset(0f, center.y), end = Offset(size.width, center.y), strokeWidth = 2f)
+                drawLine(color = gridColor, start = Offset(center.x, 0f), end = Offset(center.x, size.height), strokeWidth = 2f)
+
+                drawCircle(color = accentColor, radius = 8.dp.toPx(), center = dotCenter)
+                drawCircle(color = BrakeRed, radius = 4.dp.toPx(), center = dotCenter)
+            }
+
+            // Etichete mici pentru G-Meter
+            Text("G", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 16.dp, end = 24.dp))
+        }
+
+        // ==========================================
+        // 6. NOTIFICĂRI TUR ȘI SPLIT (CENTRU)
+        // ==========================================
+        Column(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(top = 120.dp, start = 16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            lastLapNotification?.let { notification ->
+                Box(
+                    modifier = Modifier
+                        .background(
+                            if (notification.isBestLap) Color(0xFFFFD700).copy(alpha = 0.9f) // Gold for best lap
+                            else MaterialTheme.colorScheme.secondary.copy(alpha = 0.9f),
+                            CutCornerShape(8.dp)
+                        )
+                        .padding(horizontal = 24.dp, vertical = 8.dp)
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = if (notification.isBestLap) "NEW BEST LAP!" else "LAP ${notification.lap.lapNumber} COMPLETED",
+                            color = if (notification.isBestLap) Color.Black else Color.White,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 14.sp
+                        )
+                        Text(
+                            text = notification.lap.formattedTime,
+                            color = if (notification.isBestLap) Color.Black else Color.White,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 24.sp,
+                            fontStyle = FontStyle.Italic
+                        )
+                    }
+                }
+            }
+
+            if (lastLapNotification != null && currentSplit != null) {
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            currentSplit?.let { split ->
+                Box(
+                    modifier = Modifier
+                        .background(
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+                            CutCornerShape(8.dp)
+                        )
+                        .border(1.dp, MaterialTheme.colorScheme.outline, CutCornerShape(8.dp))
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column {
+                            Text(
+                                text = String.format("%02d:%02d.%01d", split.splitTimeMs / 60000, (split.splitTimeMs % 60000) / 1000, (split.splitTimeMs % 1000) / 100),
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp
+                            )
+                        }
+                        split.deltaVsBestMs?.let { delta ->
+                            Spacer(modifier = Modifier.width(16.dp))
+                            val isFaster = delta <= 0
+                            Text(
+                                text = (if (isFaster) "-" else "+") + String.format("%.2f", kotlin.math.abs(delta) / 1000.0),
+                                color = if (isFaster) Color(0xFF00C853) else Color(0xFFD50000),
+                                fontWeight = FontWeight.Black,
+                                fontSize = 18.sp
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
 
+@Preview(
+    name = "Racing HUD Preview",
+    showBackground = true,
+    backgroundColor = 0xFF12121D, // Fundalul nostru SurfaceDark
+    widthDp = 800, // Dimensiuni orientative de ecran (Landscape)
+    heightDp = 360
+)
 @Composable
-fun LapCompletedBanner(
-    notification: AppViewModel.LapNotification,
-    modifier: Modifier = Modifier
-) {
-    val bannerColor = if (notification.isBestLap)
-        Color(0xFF00E676) else MaterialTheme.colorScheme.primary
-
-    Column(
-        modifier = modifier
-            .clip(CutCornerShape(topEnd = 16.dp, bottomEnd = 16.dp))
-            .background(bannerColor.copy(alpha = 0.9f))
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-    ) {
-        Text(
-            text = if (notification.isBestLap) "🏆 BEST LAP!" else "TUR ${notification.lap.lapNumber}",
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.ExtraBold,
-            color = Color.Black
-        )
-        Text(
-            text = notification.lap.formattedTime,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Black,
-            fontStyle = FontStyle.Italic,
-            color = Color.Black
+fun PreviewRacingHUD() {
+    // Apelăm tema pentru culori
+    FirstAppTheme(darkTheme = true) {
+        // Apelăm componenta cu date statice (dummy data)
+        RacingHUD(
+            speed = 145,
+            currentLatLng = LatLng(44.4268, 26.1025),
+            selectedTrack = null, // Defaults to SPRINT
+            currentLapTimeMs = 418000L, // Aprox 6 minute și 58 secunde
+            lastLapNotification = null,
+            allLaps = emptyList(),
+            currentSplit = SplitData(1, "Checkpoint 1", 120000L, -500L),
+            sprintProgress = 0.65f,
+            onStopClick = {}
         )
     }
-}
-
-@Composable
-fun LapRowItem(lap: LapData, isBest: Boolean) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = "L${lap.lapNumber}",
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (isBest) Color(0xFF00E676)
-            else MaterialTheme.colorScheme.onSurfaceVariant,
-            fontWeight = if (isBest) FontWeight.ExtraBold else FontWeight.Normal
-        )
-        Text(
-            text = lap.formattedTime,
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (isBest) Color(0xFF00E676)
-            else MaterialTheme.colorScheme.onSurface,
-            fontWeight = if (isBest) FontWeight.ExtraBold else FontWeight.Normal
-        )
-    }
-}
-
-private fun formatLapTime(ms: Long): String {
-    val mins = ms / 60000
-    val secs = (ms % 60000) / 1000
-    val millis = (ms % 1000) / 10
-    return String.format(java.util.Locale.getDefault(), "%02d:%02d.%02d", mins, secs, millis)
-}
-
-/**
- * Funcție matematică pentru a calcula dacă locația curentă este prea departe de traseu.
- * Folosim Android Location API pentru calcularea precisă a distanței geospațiale (Haversine).
- */
-private fun calculateOffTrackStatus(userPos: LatLng?, track: Track?, thresholdMeters: Float): Boolean {
-    if (userPos == null || track == null) return false
-
-    // Folosim metoda ta corectă .toLatLng() pentru a extrage coordonatele din Track
-    val pointsToCheck = if (track.routedPoints.isNotEmpty()) {
-        track.routedPoints.map { it.toLatLng() }
-    } else {
-        val list = mutableListOf<LatLng>()
-        list.add(track.start.toLatLng())
-        list.addAll(track.checkpoints.map { it.toLatLng() })
-        list.add(track.finish.toLatLng())
-        list
-    }
-
-    if (pointsToCheck.isEmpty()) return false
-
-    val results = FloatArray(1)
-    var minDistance = Float.MAX_VALUE
-
-    // Găsim distanța până la cel mai apropiat punct de pe traseu
-    for (point in pointsToCheck) {
-        android.location.Location.distanceBetween(
-            userPos.latitude, userPos.longitude,
-            point.latitude, point.longitude,
-            results
-        )
-        if (results[0] < minDistance) {
-            minDistance = results[0]
-        }
-    }
-
-    // Dacă cel mai apropiat punct este la peste limita stabilită, ești ieșit de pe traseu
-    return minDistance > thresholdMeters
 }

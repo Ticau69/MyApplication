@@ -153,4 +153,42 @@ object RouteHelper {
         }
         return points
     }
+
+    /**
+     * Găsește cel mai apropiat punct valid de pe o stradă folosind serviciul OSRM Nearest.
+     */
+    suspend fun getNearestRoadPoint(point: LatLng): LatLng? = withContext(Dispatchers.IO) {
+        try {
+            // OSRM folosește formatul {longitude},{latitude}
+            val url = "https://router.project-osrm.org/nearest/v1/driving/${point.longitude},${point.latitude}"
+
+            val connection = (URL(url).openConnection() as HttpsURLConnection).apply {
+                requestMethod = "GET"
+                setRequestProperty("User-Agent", "Mozilla/5.0 (Android; RaceTrackerApp)")
+                connectTimeout = 3000 // Timeout scurt, vrem un răspuns rapid la click
+                readTimeout = 3000
+            }
+
+            val responseCode = connection.responseCode
+            if (responseCode in 200..299) {
+                val response = connection.inputStream.bufferedReader().readText()
+                val root = JSONObject(response)
+
+                if (root.optString("code") == "Ok") {
+                    val waypoints = root.getJSONArray("waypoints")
+                    if (waypoints.length() > 0) {
+                        val location = waypoints.getJSONObject(0).getJSONArray("location")
+                        // Returnăm coordonata de pe stradă (OSRM returnează [lng, lat])
+                        return@withContext LatLng(location.getDouble(1), location.getDouble(0))
+                    }
+                }
+            }
+            connection.disconnect()
+        } catch (e: Exception) {
+            android.util.Log.e("RouteHelper", "Eroare Nearest OSRM: ${e.message}")
+        }
+        return@withContext null
+    }
+
 }
+

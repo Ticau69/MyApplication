@@ -1,5 +1,11 @@
 package com.example.firstapp.ui.components
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -14,15 +20,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.firstapp.data.RaceType
 import com.example.firstapp.ui.theme.BrakeRed
+import com.example.firstapp.ui.theme.FirstAppTheme
+import com.example.firstapp.data.WaypointType
 
 enum class CreationMode { MANUAL, DRIVE }
 
 @Composable
 fun CreationHUD(
+    activeMode: WaypointType,
     onAddStart: () -> Unit,
     onAddCheckpoint: () -> Unit,
     onAddFinish: () -> Unit,
@@ -37,7 +47,7 @@ fun CreationHUD(
     Box(modifier = modifier.fillMaxSize()) {
 
         // ==========================================
-        // 1. ZONA SUS: Mod Creare (Rămâne neschimbată)
+        // 1. ZONA SUS: Mod Creare (Manual / În mers)
         // ==========================================
         Row(
             modifier = Modifier
@@ -82,39 +92,56 @@ fun CreationHUD(
             verticalArrangement = Arrangement.spacedBy(12.dp),
             horizontalAlignment = Alignment.End
         ) {
-            // Uneltele pentru traseu
-            MapSideButton("START", textColor = MaterialTheme.colorScheme.onPrimary, bgColor = MaterialTheme.colorScheme.primary, onClick = onAddStart)
-            MapSideButton("+ CP", textColor = MaterialTheme.colorScheme.onSurface, bgColor = MaterialTheme.colorScheme.surfaceContainerLowest, hasBorder = true, onClick = onAddCheckpoint)
-            MapSideButton("FINISH", textColor = MaterialTheme.colorScheme.onPrimary, bgColor = MaterialTheme.colorScheme.primary, onClick = onAddFinish)
+            MapSideButton("START", textColor = MaterialTheme.colorScheme.onPrimary, bgColor = MaterialTheme.colorScheme.primary, isActive = activeMode == WaypointType.START, onClick = onAddStart)
+            MapSideButton("+ CP", textColor = MaterialTheme.colorScheme.onSurface, bgColor = MaterialTheme.colorScheme.surfaceContainerLowest, hasBorder = true, isActive = activeMode == WaypointType.CHECKPOINT, onClick = onAddCheckpoint)
 
-            // O mică bară despărțitoare vizuală pentru a separa logica de sistem (Salvare)
-            Spacer(modifier = Modifier.height(4.dp))
-            Box(modifier = Modifier.width(40.dp).height(2.dp).background(MaterialTheme.colorScheme.outlineVariant))
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // Butonul Salvează (aceeași dimensiune)
-            MapSideButton("SALVEAZĂ", textColor = MaterialTheme.colorScheme.onPrimary, bgColor = MaterialTheme.colorScheme.primary, onClick = onSaveTrack)
+            if (selectedRaceType != RaceType.LAP_RACE) {
+                MapSideButton("FINISH", textColor = MaterialTheme.colorScheme.onPrimary, bgColor = MaterialTheme.colorScheme.primary, isActive = activeMode == WaypointType.FINISH, onClick = onAddFinish)
+            }
         }
 
         // ==========================================
-        // 3. ZONA JOS-STÂNGA: Buton Anulează
+        // Butonul de salvare
+        // ==========================================
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(bottom = 15.dp, end = 16.dp)
+        ){
+            MapSideButton(
+                "SALVEAZĂ",
+                textColor = MaterialTheme.colorScheme.onPrimary,
+                bgColor = MaterialTheme.colorScheme.primary,
+                onClick = onSaveTrack,
+            )
+        }
+
+
+        // ==========================================
+        // 3. ZONA JOS-STÂNGA: Buton Anulează (împins la start = 32.dp)
         // ==========================================
         Box(
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .padding(start = 50.dp, bottom = 35.dp)
+                .padding(start = 42.dp, bottom = 15.dp)
         ) {
-            MapSideButton("ANULEAZĂ", textColor = BrakeRed, bgColor = MaterialTheme.colorScheme.surfaceContainerLowest, hasBorder = true, onClick = onCancel)
+            MapSideButton(
+                "ANULEAZĂ",
+                textColor = BrakeRed,
+                bgColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+                hasBorder = true,
+                onClick = onCancel,
+            )
         }
 
         // ==========================================
-        // 4. ZONA JOS-CENTRU: Sprint / Circuit (Comutator compact)
+        // 4. ZONA JOS-CENTRU: Sprint / Circuit
         // ==========================================
         Row(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 16.dp)
-                .height(38.dp) // Design micuț și integrat
+                .padding(bottom = 15.dp)
+                .height(38.dp)
                 .background(MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.85f), RoundedCornerShape(19.dp))
                 .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(19.dp)),
             verticalAlignment = Alignment.CenterVertically
@@ -146,25 +173,68 @@ fun CreationHUD(
     }
 }
 
-// --- Componentă modificată pentru a accepta culori și a fi reutilizabilă ---
 @Composable
 private fun MapSideButton(
     text: String,
     textColor: Color,
     bgColor: Color,
     hasBorder: Boolean = false,
+    isActive: Boolean = false, // NOU
     onClick: () -> Unit
 ) {
     val border = if (hasBorder) BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant) else null
 
+    // NOU: Animație infinită de pulsare dacă butonul este selectat
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse_transition")
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = if (isActive) 0.3f else 1f, // Scade la 30% opacitate
+        animationSpec = infiniteRepeatable(
+            animation = tween(600, easing = LinearEasing), // Durează 600ms
+            repeatMode = RepeatMode.Reverse // Și se întoarce la fel
+        ),
+        label = "pulse_alpha"
+    )
+
     Button(
         onClick = onClick,
         shape = CutCornerShape(topStart = 8.dp, bottomEnd = 8.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = bgColor, contentColor = textColor),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = bgColor.copy(alpha = alpha), // Aplicăm animația aici!
+            contentColor = textColor.copy(alpha = alpha)
+        ),
         border = border,
-        contentPadding = PaddingValues(0.dp), // Eliminăm padding-ul intern
-        modifier = Modifier.size(width = 90.dp, height = 44.dp) // Dimensiuni fixe pentru TOATE butoanele
+        contentPadding = PaddingValues(0.dp),
+        modifier = Modifier.size(width = 90.dp, height = 44.dp)
     ) {
         Text(text, fontWeight = FontWeight.Black, fontSize = 11.sp, letterSpacing = 1.sp)
+    }
+}
+
+// ==========================================
+// 5. PREVIEW PENTRU ANDROID STUDIO
+// ==========================================
+@Preview(
+    name = "Creation HUD - Circuit Mode",
+    showBackground = true,
+    backgroundColor = 0xFF12121D, // Fundalul întunecat al aplicației
+    widthDp = 800, // Dimensiune Landscape orientativă
+    heightDp = 360
+)
+@Composable
+fun PreviewCreationHUD() {
+    var mockRaceType by remember { mutableStateOf(RaceType.LAP_RACE) }
+
+    FirstAppTheme(darkTheme = true) {
+        CreationHUD(
+            activeMode = WaypointType.START,
+            onAddStart = {},
+            onAddCheckpoint = {},
+            onAddFinish = {},
+            onSaveTrack = {},
+            onCancel = {},
+            selectedRaceType = mockRaceType,
+            onRaceTypeChanged = { mockRaceType = it }
+        )
     }
 }

@@ -28,15 +28,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val historyManager = HistoryManager(context)
     private val locationTracker = LocationTracker(context)
 
-    init {
-        viewModelScope.launch {
-            LocationTracker.sharedLocationFlow.collect { data ->
-                _currentLatLng.value = data.latLng
-                _currentSpeed.value = data.speed
-            }
-        }
-    }
-
     // --- App State ---
     private val _appState = MutableStateFlow(AppState.CRUISE)
     val appState: StateFlow<AppState> = _appState.asStateFlow()
@@ -228,6 +219,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _sprintProgress = MutableStateFlow(0f)
     val sprintProgress = _sprintProgress.asStateFlow()
 
+    init {
+        // Pornim colectarea locației imediat ce ViewModel-ul este creat.
+        // Folosim o colectare sigură pentru a evita orice race condition la inițializarea flow-urilor.
+        viewModelScope.launch {
+            LocationTracker.sharedLocationFlow.collect { data ->
+                _currentLatLng.value = data.latLng
+                _currentSpeed.value = data.speed
+            }
+        }
+    }
+
     fun onSplitRecorded(split: SplitData) {
         _currentSplit.value = split
         viewModelScope.launch {
@@ -239,7 +241,4 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun updateSprintProgress(progress: Float) {
         _sprintProgress.value = progress
     }
-
-
-
 }
