@@ -10,13 +10,28 @@ import android.view.Surface
 import android.view.WindowManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import com.example.firstapp.AppState
 
 @Composable
-fun BearingSensorEffect(onBearingChanged: (Float) -> Unit) {
+fun BearingSensorEffect(
+    appState: AppState,
+    onBearingChanged: (Float) -> Unit
+) {
     val context = LocalContext.current
 
-    DisposableEffect(Unit) {
+    // Recalculăm delay-ul când se schimbă starea
+    val sensorDelay = remember(appState) {
+        when (appState) {
+            AppState.CRUISE, AppState.RACING, AppState.TRACK_RACING ->
+                SensorManager.SENSOR_DELAY_UI      // ~60Hz
+            else ->
+                SensorManager.SENSOR_DELAY_NORMAL  // ~5Hz în meniuri
+        }
+    }
+
+    DisposableEffect(sensorDelay) { // ← depinde de delay, se recreează când se schimbă
         val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
         val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
         val rotationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
@@ -37,10 +52,14 @@ fun BearingSensorEffect(onBearingChanged: (Float) -> Unit) {
 
                 val remappedMatrix = FloatArray(9)
                 when (displayRotation) {
-                    Surface.ROTATION_90 -> SensorManager.remapCoordinateSystem(rotationMatrix, SensorManager.AXIS_Y, SensorManager.AXIS_MINUS_X, remappedMatrix)
-                    Surface.ROTATION_180 -> SensorManager.remapCoordinateSystem(rotationMatrix, SensorManager.AXIS_MINUS_X, SensorManager.AXIS_MINUS_Y, remappedMatrix)
-                    Surface.ROTATION_270 -> SensorManager.remapCoordinateSystem(rotationMatrix, SensorManager.AXIS_MINUS_Y, SensorManager.AXIS_X, remappedMatrix)
-                    else -> SensorManager.remapCoordinateSystem(rotationMatrix, SensorManager.AXIS_X, SensorManager.AXIS_Y, remappedMatrix)
+                    Surface.ROTATION_90 -> SensorManager.remapCoordinateSystem(
+                        rotationMatrix, SensorManager.AXIS_Y, SensorManager.AXIS_MINUS_X, remappedMatrix)
+                    Surface.ROTATION_180 -> SensorManager.remapCoordinateSystem(
+                        rotationMatrix, SensorManager.AXIS_MINUS_X, SensorManager.AXIS_MINUS_Y, remappedMatrix)
+                    Surface.ROTATION_270 -> SensorManager.remapCoordinateSystem(
+                        rotationMatrix, SensorManager.AXIS_MINUS_Y, SensorManager.AXIS_X, remappedMatrix)
+                    else -> SensorManager.remapCoordinateSystem(
+                        rotationMatrix, SensorManager.AXIS_X, SensorManager.AXIS_Y, remappedMatrix)
                 }
 
                 val orientation = FloatArray(3)
@@ -52,7 +71,7 @@ fun BearingSensorEffect(onBearingChanged: (Float) -> Unit) {
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
         }
 
-        sensorManager.registerListener(listener, rotationSensor, SensorManager.SENSOR_DELAY_UI)
+        sensorManager.registerListener(listener, rotationSensor, sensorDelay)
         onDispose { sensorManager.unregisterListener(listener) }
     }
 }

@@ -12,11 +12,17 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -101,6 +107,12 @@ fun RaceTrackerApp() {
     }
     val notificationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
+    val savedTracks by viewModel.savedTracks.collectAsState()
+
+    val countdownValue by viewModel.countdownValue.collectAsState()
+    val isCountingDown by viewModel.isCountingDown.collectAsState()
+    val allLaps by viewModel.allLaps.collectAsState()
+
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) viewModel.checkGpsStatus()
@@ -110,20 +122,31 @@ fun RaceTrackerApp() {
     }
 
     LaunchedEffect(Unit) {
-        val alreadyGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        val alreadyGranted = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
         if (alreadyGranted) viewModel.onPermissionResult(true)
-        else permissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+        else permissionLauncher.launch(
+            arrayOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            )
+        )
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
+
         viewModel.checkGpsStatus()
+        viewModel.startGpsMonitoring() // ← adaugă
     }
 
     // NOU: Senzorul de direcție este acum perfect izolat într-o componentă curată
-    BearingSensorEffect(onBearingChanged = { bearing ->
-        viewModel.updateBearing(bearing)
-    })
+    BearingSensorEffect(
+        appState = currentState,
+        onBearingChanged = { bearing -> viewModel.updateBearing(bearing) }
+    )
 
     if (!isGpsEnabled) {
         GpsDisabledDialog(
@@ -140,6 +163,7 @@ fun RaceTrackerApp() {
                 latLng = currentLatLng,
                 bearing = currentBearing,
                 appState = currentState,
+                savedTracks = savedTracks, // ← adaugă
                 onMapReady = { huaweiMapRef.value = it }
             )
 
@@ -152,14 +176,43 @@ fun RaceTrackerApp() {
                 selectedTrack = selectedTrack,
                 onStateChange = { viewModel.transitionTo(it) }
             )
-        }
 
-        raceFinishData?.let { data ->
-            RaceFinishDialog(finishData = data, onDismiss = { viewModel.dismissRaceFinish() })
+            CountdownOverlay(value = countdownValue)
+
+            raceFinishData?.let { data ->
+                RaceFinishDialog(
+                    finishData = data,
+                    laps = allLaps,
+                    onDismiss = { viewModel.dismissRaceFinish() }
+                )
+            }
         }
     } else {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("Sunt necesare permisiunile de locație.")
+        }
+    }
+}
+
+@Composable
+fun CountdownOverlay(value: Int?) {
+    if (value != null && value > 0) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = value.toString(),
+                style = TextStyle(
+                    fontSize = 180.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White,
+                    shadow = Shadow(
+                        color = Color.Black,
+                        blurRadius = 10f
+                    )
+                )
+            )
         }
     }
 }

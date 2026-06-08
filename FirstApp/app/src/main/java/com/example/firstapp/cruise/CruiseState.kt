@@ -168,6 +168,8 @@ class CruiseState(
 
     fun onDestroy() {
         exitFocusMode()
+        trackMarkers.keys.forEach { it.remove() }
+        trackMarkers.clear() // ← adaugă
         job.cancel()
     }
 }

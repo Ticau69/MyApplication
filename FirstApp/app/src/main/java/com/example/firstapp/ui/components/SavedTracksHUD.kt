@@ -28,8 +28,12 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.tooling.preview.Preview
+import com.example.firstapp.data.RaceType
+import com.example.firstapp.data.SerializableLatLng
 import com.example.firstapp.data.Track
 import com.example.firstapp.ui.theme.BrakeRed
+import com.example.firstapp.ui.theme.FirstAppTheme
 import com.example.firstapp.ui.theme.OutlineSlate
 import com.example.trackappv2.R
 
@@ -39,6 +43,7 @@ fun SavedTracksHUD(
     onCloseClick: () -> Unit,
     onTrackClick: (Track) -> Unit,
     onDeleteClick: (Track) -> Unit,
+    onStartRaceClick: (Track) -> Unit, // Adăugat
     modifier: Modifier = Modifier
 ) {
     // Fundalul principal: translucid (Glassmorphism) pentru a lăsa harta să se vadă
@@ -90,7 +95,8 @@ fun SavedTracksHUD(
                         TrackCard(
                             track = track,
                             onClick = { onTrackClick(track) },
-                            onDelete = { onDeleteClick(track) }
+                            onDelete = { onDeleteClick(track) },
+                            onStartRace = { onStartRaceClick(track) } // Pasăm lambda corect
                         )
                     }
                 }
@@ -99,13 +105,48 @@ fun SavedTracksHUD(
     }
 }
 
+@Preview(showBackground = true, widthDp = 800, heightDp = 400)
+@Composable
+fun PreviewSavedTracksHUD() {
+    val mockTracks = listOf(
+        Track(
+            id = "1",
+            name = "Transfăgărășan Section",
+            createdAt = "2024-05-20 14:30",
+            start = SerializableLatLng(44.4268, 26.1025),
+            checkpoints = listOf(SerializableLatLng(44.4300, 26.1100)),
+            finish = SerializableLatLng(44.4400, 26.1200),
+            raceType = RaceType.SPRINT
+        ),
+        Track(
+            id = "2",
+            name = "Motorpark Circuit",
+            createdAt = "2024-05-21 10:15",
+            start = SerializableLatLng(44.5000, 26.2000),
+            checkpoints = listOf(SerializableLatLng(44.5100, 26.2100), SerializableLatLng(44.5200, 26.2200)),
+            finish = SerializableLatLng(44.5000, 26.2000),
+            raceType = RaceType.LAP_RACE
+        )
+    )
+
+    FirstAppTheme(darkTheme = true) {
+        SavedTracksHUD(
+            tracks = mockTracks,
+            onCloseClick = {},
+            onTrackClick = {},
+            onDeleteClick = {},
+            onStartRaceClick = {}
+        )
+    }
+}
+
 @Composable
 fun TrackCard(
     track: Track,
     onClick: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onStartRace: () -> Unit  // ← adaugă
 ) {
-    // Un card cu Octagon Influence (tăiat la colțuri) și contur subtil
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -116,7 +157,6 @@ fun TrackCard(
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Detalii cursă (Stânga)
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = track.name.uppercase(),
@@ -126,17 +166,32 @@ fun TrackCard(
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Data: ${track.createdAt} | Puncte: ${track.checkpoints.size}",
+                text = "${track.createdAt} | ${track.checkpoints.size} CP",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-
+            Text(
+                text = if (track.raceType == RaceType.LAP_RACE)
+                    "🔄 Circuit" else "➡️ Sprint",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+                fontSize = 11.sp
+            )
         }
 
-        // Buton de ștergere (Dreapta) cu nuanța Brake Red
+        // Buton Start Cursă
+        IconButton(onClick = onStartRace) {
+            Icon(
+                painter = painterResource(id = R.drawable.ic_start_race),
+                contentDescription = "Start cursă",
+                tint = Color(0xFF00E676)
+            )
+        }
+
+        // Buton Ștergere
         IconButton(onClick = onDelete) {
             Icon(
-                painter = painterResource(id = R.drawable.ic_delete), // Iconița ta de delete creată anterior
+                painter = painterResource(id = R.drawable.ic_delete),
                 contentDescription = "Șterge",
                 tint = BrakeRed
             )

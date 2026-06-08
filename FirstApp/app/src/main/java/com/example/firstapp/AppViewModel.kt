@@ -15,10 +15,12 @@ import com.example.firstapp.racing.HistoryManager
 import com.example.firstapp.racing.RaceRecord
 import com.example.firstapp.service.LocationForegroundService
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -27,6 +29,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val trackRepository = TrackRepository(context)
     private val historyManager = HistoryManager(context)
     private val locationTracker = LocationTracker(context)
+
+    // --- CountDonw ---
+    private val _countdownValue = MutableStateFlow<Int?>(null)
+    val countdownValue = _countdownValue.asStateFlow()
+
+    private val _isCountingDown = MutableStateFlow(false)
+    val isCountingDown = _isCountingDown.asStateFlow()
 
     // --- App State ---
     private val _appState = MutableStateFlow(AppState.CRUISE)
@@ -80,6 +89,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _selectedTrack.value = track
     }
 
+    // -- Countdown function
+    fun startCountdown(onFinished: () -> Unit) {
+        viewModelScope.launch {
+            _isCountingDown.value = true
+
+            for (i in 3 downTo 1) {
+                _countdownValue.value = i
+                delay(1000)
+            }
+
+            _countdownValue.value = 0 // GO!
+            delay(600)
+
+            _countdownValue.value = null
+            _isCountingDown.value = false
+            onFinished()
+        }
+    }
+
     // --- Permission ---
     fun onPermissionResult(granted: Boolean) {
         _hasLocationPermission.value = granted
@@ -87,18 +115,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // --- GPS Check ---
+    private var gpsMonitorJob: Job? = null
     fun checkGpsStatus() {
         val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
         _isGpsEnabled.value = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
     }
 
     fun startGpsMonitoring() {
-        viewModelScope.launch {
-            while (true) {
+        gpsMonitorJob?.cancel()
+        gpsMonitorJob = viewModelScope.launch {
+            while (isActive) {
                 checkGpsStatus()
-                delay(2000) // Verificăm la fiecare 2 secunde
+                delay(5000) // 5s e suficient
             }
         }
+    }
+
+    fun stopGpsMonitoring() {
+        gpsMonitorJob?.cancel()
+        gpsMonitorJob = null
     }
 
     // --- Location Tracking ---
@@ -161,6 +196,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         super.onCleared()
+        stopGpsMonitoring()
     }
 
     data class RaceFinishData(

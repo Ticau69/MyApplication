@@ -31,8 +31,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.firstapp.AppState
-import com.example.firstapp.data.RaceType
-import com.example.firstapp.data.TrackRepository
 import com.example.trackappv2.R
 import com.huawei.hms.maps.CameraUpdateFactory
 import com.huawei.hms.maps.HuaweiMap
@@ -44,9 +42,7 @@ import com.huawei.hms.maps.model.LatLng
 import com.huawei.hms.maps.model.MapStyleOptions
 import com.huawei.hms.maps.model.Marker
 import com.huawei.hms.maps.model.MarkerOptions
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.seconds
 
 @Composable
@@ -54,6 +50,7 @@ fun MapBackground(
     latLng: LatLng?,
     bearing: Float,
     appState: AppState,
+    savedTracks: List<com.example.firstapp.data.Track> = emptyList(), // ← adaugă
     onMapReady: (HuaweiMap) -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -113,48 +110,35 @@ fun MapBackground(
         isFollowingUser = true
     }
 
-    LaunchedEffect(appState, huaweiMapInstance) {
+    // Șterge blocul existent și înlocuiește cu:
+    LaunchedEffect(appState, huaweiMapInstance, savedTracks) {
         val map = huaweiMapInstance ?: return@LaunchedEffect
 
-        // Dacă ieșim din modul Cruise (ex: intrăm în Editare sau în Cursă), curățăm harta
-        if (appState != AppState.CRUISE) {
-            savedTrackMarkers.forEach { it.remove() }
-            savedTrackMarkers.clear()
-            return@LaunchedEffect
-        }
+        // Curățăm markerii vechi indiferent de stare
+        savedTrackMarkers.forEach { it.remove() }
+        savedTrackMarkers.clear()
 
-        // Dacă suntem în Cruise, aducem cursele pe hartă
-        try {
-            // Ștergem pinii vechi înainte să punem unii noi, ca să nu se dubleze
-            savedTrackMarkers.forEach { it.remove() }
-            savedTrackMarkers.clear()
+        // Desenăm markeri doar în Cruise
+        if (appState != AppState.CRUISE) return@LaunchedEffect
 
-            // Extragem traseele pe un thread de background pentru a nu bloca UI-ul
-            val tracks: List<com.example.firstapp.data.Track> = withContext(Dispatchers.IO) {
-                val repo = TrackRepository(context)
-                // AICI: Înlocuiește getTracks() cu numele exact al funcției tale din repo!
-                // Dacă nu ai încă o funcție care returnează lista, va trebui să o creăm.
-                repo.getTracks()
+        savedTracks.forEach { track ->
+            val marker = map.addMarker(
+                MarkerOptions()
+                    .position(track.start.toLatLng())
+                    .icon(savedTrackIcon)
+                    .title(track.name)
+                    .snippet(
+                        if (track.raceType == com.example.firstapp.data.RaceType.LAP_RACE)
+                            "Circuit (Ture)"
+                        else
+                            "Sprint (A → B)"
+                    )
+                    .anchorMarker(0.5f, 1f)
+            )
+            if (marker != null) {
+                marker.tag = track.id
+                savedTrackMarkers.add(marker)
             }
-
-
-
-            tracks.forEach { track ->
-                val marker = map.addMarker(
-                    MarkerOptions()
-                        .position(track.start.toLatLng())
-                        .icon(savedTrackIcon)
-                        .title(track.name) // Se va afișa numele traseului la click
-                        .snippet(if (track.raceType == RaceType.LAP_RACE) "Circuit (Ture)" else "Sprint (A → B)")
-                        .anchorMarker(0.5f, 1f)
-                )
-                if (marker != null) {
-                    marker.tag = track.id // Ascundem ID-ul în tag-ul markerului pentru viitor
-                    savedTrackMarkers.add(marker)
-                }
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("MapBackground", "Eroare la adăugarea pinilor de start: ${e.message}")
         }
     }
 

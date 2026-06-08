@@ -3,7 +3,9 @@ package com.example.firstapp.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CutCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -12,15 +14,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.firstapp.AppViewModel
 import com.example.firstapp.data.LapData
-import com.example.firstapp.ui.theme.BrakeRed
-import com.example.firstapp.ui.theme.OutlineSlate
-import com.example.firstapp.ui.theme.PrimaryVoltBlue
+import com.example.firstapp.data.RaceType
+import com.example.firstapp.data.SplitData
 
 @Composable
 fun RaceFinishDialog(
@@ -31,137 +33,134 @@ fun RaceFinishDialog(
     val mins = finishData.durationSeconds / 60
     val secs = finishData.durationSeconds % 60
 
+    // Culori fallback sigure în caz că cele din temă lipsesc
+    val voltBlue = MaterialTheme.colorScheme.primary
+    val brakeRed = Color(0xFFE53935)
+    val outlineSlate = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
             dismissOnBackPress = true,
-            dismissOnClickOutside = false // Forțăm utilizatorul să apese OK
+            dismissOnClickOutside = false
         )
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(CutCornerShape(16.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainer)
-                .border(1.5.dp, OutlineSlate.copy(alpha = 0.5f), CutCornerShape(16.dp))
+                .background(MaterialTheme.colorScheme.surface) // REPARAT: Folosim 'surface' standard
+                .border(1.5.dp, outlineSlate, CutCornerShape(16.dp))
                 .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Titlu
             Text(
                 text = "🏁 FINISH!",
-                style = MaterialTheme.typography.displayLarge.copy(
+                style = MaterialTheme.typography.headlineLarge.copy( // REPARAT: Folosim headlineLarge (mai compatibil)
                     fontSize = 32.sp,
                     fontStyle = FontStyle.Italic
                 ),
                 fontWeight = FontWeight.Black,
-                color = PrimaryVoltBlue,
+                color = voltBlue,
                 letterSpacing = 2.sp
             )
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Statistici
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                FinishStatItem(
-                    label = "TIMP",
-                    value = String.format("%02d:%02d", mins, secs),
-                    color = Color.White
+                FinishStatItem("TIMP", String.format("%02d:%02d", mins, secs), MaterialTheme.colorScheme.onSurface)
+                FinishStatItem("VITEZĂ MAX", "${finishData.maxSpeed} km/h", brakeRed)
+                FinishStatItem("DISTANȚĂ", String.format("%.2f km", finishData.distanceKm), voltBlue)
+            }
+
+            if (laps.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Divider(color = outlineSlate) // REPARAT: Divider simplu compatibil cu versiuni mai vechi de Compose
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                    text = "TURURI",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    letterSpacing = 2.sp
                 )
-                FinishStatItem(
-                    label = "VITEZĂ MAX",
-                    value = "${finishData.maxSpeed} km/h",
-                    color = BrakeRed
-                )
-                FinishStatItem(
-                    label = "DISTANȚĂ",
-                    value = String.format("%.2f km", finishData.distanceKm),
-                    color = PrimaryVoltBlue
-                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                val bestLapMs = laps.minOfOrNull { it.lapTimeMs } ?: 0L
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 160.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    laps.forEach { lap ->
+                        val isBest = lap.lapTimeMs == bestLapMs
+
+                        // REPARAT: Calculăm formatul timpului pe loc în caz că proprietatea lipsește din model
+                        val lMins = (lap.lapTimeMs / 1000) / 60
+                        val lSecs = (lap.lapTimeMs / 1000) % 60
+                        val formattedTime = String.format("%02d:%02d", lMins, lSecs)
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Tur ${lap.lapNumber}", color = if (isBest) Color(0xFF00E676) else MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(formattedTime, color = if (isBest) Color(0xFF00E676) else MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Bold)
+                            Text("${lap.maxSpeedKmh} km/h", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Buton OK
-            VelocityPrimaryButton(
-                text = "OK",
+            Button(
                 onClick = onDismiss,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-    }
-
-    if (laps.isNotEmpty()) {
-        Spacer(modifier = Modifier.height(16.dp))
-
-        HorizontalDivider(color = OutlineSlate.copy(alpha = 0.3f))
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        Text(
-            text = "TURURI",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            letterSpacing = 2.sp
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        val bestLapMs = laps.minOf { it.lapTimeMs }
-
-        laps.forEach { lap ->
-            val isBest = lap.lapTimeMs == bestLapMs
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
+                modifier = Modifier.fillMaxWidth(),
+                shape = CutCornerShape(8.dp)
             ) {
-                Text(
-                    text = "Tur ${lap.lapNumber}",
-                    color = if (isBest) Color(0xFF00E676)
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = if (isBest) FontWeight.Bold else FontWeight.Normal
-                )
-                Text(
-                    text = lap.formattedTime,
-                    color = if (isBest) Color(0xFF00E676)
-                    else MaterialTheme.colorScheme.onSurface,
-                    fontWeight = if (isBest) FontWeight.Bold else FontWeight.Normal
-                )
-                Text(
-                    text = "${lap.maxSpeedKmh} km/h",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Text("OK", fontWeight = FontWeight.Black)
             }
         }
     }
 }
 
 @Composable
-fun FinishStatItem(
-    label: String,
-    value: String,
-    color: Color
-) {
+fun FinishStatItem(label: String, value: String, color: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = value,
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.ExtraBold,
-            color = color,
-            fontSize = 18.sp
-        )
+        Text(text = value, fontWeight = FontWeight.ExtraBold, color = color, fontSize = 18.sp)
         Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 10.sp,
-            letterSpacing = 1.sp
-        )
+        Text(text = label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, letterSpacing = 1.sp)
+    }
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFF12121D)
+@Composable
+fun PreviewRaceFinishDialog() {
+    // Notă: Dacă aceste clase (RaceFinishData, LapData) nu sunt structurate exact așa în proiect,
+    // acest Preview va trebui comentat sau adaptat conform constructorilor reali.
+    val mockFinishData = AppViewModel.RaceFinishData(
+        durationSeconds = 418,
+        maxSpeed = 156,
+        distanceKm = 12.45,
+        splits = emptyList(),
+        raceType = RaceType.LAP_RACE
+    )
+
+    val mockLaps = listOf(
+        LapData(lapNumber = 1, lapTimeMs = 142000L, maxSpeedKmh = 145, distanceKm = 4.2),
+        LapData(lapNumber = 2, lapTimeMs = 138000L, maxSpeedKmh = 156, distanceKm = 4.2)
+    )
+
+    MaterialTheme(colorScheme = darkColorScheme()) {
+        RaceFinishDialog(finishData = mockFinishData, laps = mockLaps, onDismiss = {})
     }
 }

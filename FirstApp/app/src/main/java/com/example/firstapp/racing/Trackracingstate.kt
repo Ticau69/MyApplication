@@ -144,7 +144,14 @@ class TrackRacingState(
 
         latLng?.let { pos ->
             session.update(speed, pos, totalCheckpoints, passedCheckpoints)
+
             gpsTrailPoints.add(pos)
+
+            // Limităm la 500 puncte — suficient vizual, previne OOM la curse lungi
+            if (gpsTrailPoints.size > 500) {
+                gpsTrailPoints.removeAt(0)
+            }
+
             gpsTrailPolyline?.points = gpsTrailPoints.toList()
             checkCheckpointProximity(pos)
         }
