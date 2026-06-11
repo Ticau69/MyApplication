@@ -9,9 +9,12 @@ import androidx.core.graphics.createBitmap
 import androidx.core.graphics.toColorInt
 import com.example.firstapp.AppState
 import com.example.firstapp.AppViewModel
+import com.example.firstapp.data.GhostFrame
+import com.example.firstapp.data.GhostRun
 import com.example.firstapp.data.LapData
 import com.example.firstapp.data.RaceType
 import com.example.firstapp.data.RunData
+import com.example.firstapp.data.SerializableLatLng
 import com.example.firstapp.data.SplitData
 import com.example.firstapp.data.Track
 import com.example.trackappv2.R
@@ -31,13 +34,16 @@ class TrackRacingState(
     private val onStateChange: (AppState) -> Unit,
     private val track: Track,
     private val huaweiMap: HuaweiMap,
-    private val bestRun: RunData? = null,  // ← pentru delta splits
+    private val bestRun: RunData? = null,
+    private val ghostRun: GhostRun? = null,  // ← adaugă
     private val onRaceFinished: (AppViewModel.RaceFinishData) -> Unit,
     private val onSplitRecorded: (SplitData) -> Unit,
-    private val onLapCompleted: (LapData) -> Unit
+    private val onLapCompleted: (LapData) -> Unit,
+    private val onGhostDeltaUpdated: (Long) -> Unit = {}  // ← delta în ms
 ) {
     val session = RaceSession(track.raceType)
-    private var isInitialized = false
+    var hasRaceStarted = false
+        private set
     private var passedCheckpoints = 0
 
     // Polilinii pe hartă
@@ -70,8 +76,45 @@ class TrackRacingState(
 
     val totalCheckpoints = checkpoints.size
 
+    private val currentGhostFrames = mutableListOf<GhostFrame>()
+    private var lastFrameTimeMs = 0L
+    private val FRAME_INTERVAL_MS = 250L
+    // Marker ghost pe hartă
+    private var ghostMarker: com.huawei.hms.maps.model.Marker? = null
+    private var ghostPolyline: com.huawei.hms.maps.model.Polyline? = null
+
     init {
         drawSavedTrack()
+        if (ghostRun != null) setupGhostMarker()
+    }
+
+    private fun setupGhostMarker() {
+        val startPos = ghostRun?.frames?.firstOrNull()?.position?.toLatLng() ?: return
+
+        // Marker ghost — săgeată semi-transparentă
+        ghostMarker = huaweiMap.addMarker(
+            com.huawei.hms.maps.model.MarkerOptions()
+                .position(startPos)
+                .icon(createGhostIcon())
+                .anchorMarker(0.5f, 0.5f)
+                .flat(true)
+                .alpha(0.6f)  // Semi-transparent
+        )
+    }
+
+    private fun createGhostIcon(): com.huawei.hms.maps.model.BitmapDescriptor {
+        val drawable = androidx.core.content.ContextCompat.getDrawable(
+            context, com.example.trackappv2.R.drawable.ic_ghost_arrow
+        )!!
+        val bitmap = androidx.core.graphics.createBitmap(
+            drawable.intrinsicWidth,
+            drawable.intrinsicHeight,
+            android.graphics.Bitmap.Config.ARGB_8888
+        )
+        val canvas = android.graphics.Canvas(bitmap)
+        drawable.setBounds(0, 0, canvas.width, canvas.height)
+        drawable.draw(canvas)
+        return com.huawei.hms.maps.model.BitmapDescriptorFactory.fromBitmap(bitmap)
     }
 
     private fun drawSavedTrack() {
@@ -104,58 +147,113 @@ class TrackRacingState(
                 .endCap(RoundCap())
         )
 
-        drawnMarkers.add(
-            huaweiMap.addMarker(
-                MarkerOptions()
-                    .position(track.start.toLatLng())
-                    .icon(bitmapFromVector(R.drawable.ic_start_marker))
-                    .anchorMarker(0.5f, 1f)
-                    .title(track.name)
-            )
-        )
+        huaweiMap.addMarker(
+            MarkerOptions()
+                .position(track.start.toLatLng())
+                .icon(bitmapFromVector(R.drawable.ic_start_marker))
+                .anchorMarker(0.5f, 1f)
+                .title(track.name)
+        )?.let { drawnMarkers.add(it) }
 
-        drawnMarkers.add(
-            huaweiMap.addMarker(
-                MarkerOptions()
-                    .position(track.finish.toLatLng())
-                    .icon(bitmapFromVector(R.drawable.ic_finish_marker))
-                    .anchorMarker(0.5f, 1f)
-            )
-        )
+        huaweiMap.addMarker(
+            MarkerOptions()
+                .position(track.finish.toLatLng())
+                .icon(bitmapFromVector(R.drawable.ic_finish_marker))
+                .anchorMarker(0.5f, 1f)
+        )?.let { drawnMarkers.add(it) }
 
         track.checkpoints.forEach { cp ->
-            drawnMarkers.add(
-                huaweiMap.addMarker(
-                    MarkerOptions()
-                        .position(cp.toLatLng())
-                        .icon(bitmapFromVector(R.drawable.ic_checkpoint_marker))
-                        .anchorMarker(0.5f, 1f)
-                )
-            )
+            huaweiMap.addMarker(
+                MarkerOptions()
+                    .position(cp.toLatLng())
+                    .icon(bitmapFromVector(R.drawable.ic_checkpoint_marker))
+                    .anchorMarker(0.5f, 1f)
+            )?.let { drawnMarkers.add(it) }
         }
     }
 
     fun update(speed: Int, latLng: LatLng?) {
-        if (!isInitialized) {
-            session.start()
-            isInitialized = true
-            nextCheckpointIndex = 0
-        }
-
         latLng?.let { pos ->
-            session.update(speed, pos, totalCheckpoints, passedCheckpoints)
+            if (!hasRaceStarted) {
+                val startPos = checkpoints.firstOrNull() ?: return
+                val distToStart = distanceBetween(pos, startPos)
 
-            gpsTrailPoints.add(pos)
+                // AUTO-START: Ești aproape de start (30m) și ai tăiat linia cu peste 10 km/h
+                if (distToStart <= CHECKPOINT_RADIUS_M && speed >= 10) {
+                    session.start()
+                    hasRaceStarted = true
 
-            // Limităm la 500 puncte — suficient vizual, previne OOM la curse lungi
-            if (gpsTrailPoints.size > 500) {
-                gpsTrailPoints.removeAt(0)
+                    // Validăm instantaneu trecerea prin Start
+                    val split = session.recordSplit(0, checkpointNames[0], bestRun)
+                    onSplitRecorded(split)
+
+                    nextCheckpointIndex = 1
+                    passedCheckpoints = 1
+                    lastFrameTimeMs = session.currentTimeMs
+                } else {
+                    // Așteptăm. Actualizăm doar linia GPS pe hartă, dar timerul rămâne la 0!
+                    gpsTrailPoints.add(pos)
+                    if (gpsTrailPoints.size > 500) gpsTrailPoints.removeAt(0)
+                    gpsTrailPolyline?.points = gpsTrailPoints.toList()
+                    return // Oprim execuția aici ca să nu înregistrăm telemetrie degeaba
+                }
             }
 
+            session.update(speed, pos, totalCheckpoints, passedCheckpoints)
+
+            // Înregistrăm frame pentru ghost
+            val currentTime = session.currentTimeMs
+            if (currentTime - lastFrameTimeMs >= FRAME_INTERVAL_MS) {
+                currentGhostFrames.add(
+                    GhostFrame(
+                        timeMs = currentTime,
+                        position = SerializableLatLng(pos.latitude, pos.longitude),
+                        speedKmh = speed,
+                        bearing = 0f // bearing-ul vine din senzor, nu GPS
+                    )
+                )
+                lastFrameTimeMs = currentTime
+            }
+
+            // Actualizăm poziția ghost-ului pe hartă
+            updateGhostPosition(currentTime, pos)
+
+            gpsTrailPoints.add(pos)
+            if (gpsTrailPoints.size > 500) gpsTrailPoints.removeAt(0)
             gpsTrailPolyline?.points = gpsTrailPoints.toList()
             checkCheckpointProximity(pos)
         }
     }
+
+    // NOU: Am adăugat playerPos
+    private fun updateGhostPosition(currentTimeMs: Long, playerPos: LatLng) {
+        val ghost = ghostRun ?: return
+        val (ghostPos, ghostBearing) = ghost.getPositionAt(currentTimeMs) ?: return
+
+        ghostMarker?.position = ghostPos.toLatLng()
+        ghostMarker?.rotation = ghostBearing
+
+        // Calculăm delta: Găsim momentul de timp când FANTOMA a trecut prin locul în care ești TU ACUM
+        val nearestGhostFrameIndex = ghost.frames.indexOfFirst { frame ->
+            val results = FloatArray(1)
+            android.location.Location.distanceBetween(
+                frame.position.latitude, frame.position.longitude,
+                playerPos.latitude, playerPos.longitude, // <-- REPARAT: Aici trebuie să fie playerPos, nu ghostPos!
+                results
+            )
+            results[0] < 20f // În raza de 20m
+        }
+
+        if (nearestGhostFrameIndex >= 0) {
+            val ghostTimeAtOurPosition = ghost.frames[nearestGhostFrameIndex].timeMs
+            // Delta = Timpul tău actual MINUS Timpul la care a ajuns fantoma aici
+            // Negativ (-) înseamnă că ești mai rapid. Pozitiv (+) înseamnă că ești în urmă.
+            val delta = currentTimeMs - ghostTimeAtOurPosition
+            onGhostDeltaUpdated(delta)
+        }
+    }
+
+    fun getCurrentGhostFrames(): List<GhostFrame> = currentGhostFrames.toList()
 
     private fun checkCheckpointProximity(pos: LatLng) {
         if (nextCheckpointIndex >= checkpoints.size) return
@@ -232,6 +330,10 @@ class TrackRacingState(
     }
 
     fun cleanup() {
+        ghostMarker?.remove()
+        ghostMarker = null
+        ghostPolyline?.remove()
+        ghostPolyline = null
         trackPolyline?.remove()
         gpsTrailPolyline?.remove()
         drawnMarkers.forEach { it.remove() }

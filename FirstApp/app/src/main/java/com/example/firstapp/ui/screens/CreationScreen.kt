@@ -12,11 +12,13 @@ import com.example.firstapp.data.RaceType
 import com.example.firstapp.data.WaypointType
 import com.example.firstapp.ui.components.CreationHUD
 import com.huawei.hms.maps.HuaweiMap
+import com.huawei.hms.maps.model.LatLng
 
 @Composable
 fun CreationScreen(
     creationLogic: CreationState,
     huaweiMap: HuaweiMap?,
+    currentLatLng: LatLng?,
     onStateChange: (AppState) -> Unit
 ) {
     var currentRaceType by remember { mutableStateOf(creationLogic.trackDraft.raceType) }
@@ -52,6 +54,10 @@ fun CreationScreen(
         onRaceTypeChanged = { newType ->
             currentRaceType = newType
             creationLogic.setRaceType(newType)
-        }
+        },
+        isRecording = creationLogic.isLiveRecording,
+        onStartDriveRecording = { creationLogic.startLiveRecording(currentLatLng) },
+        onRecordDriveCheckpoint = { creationLogic.recordLiveCheckpoint(currentLatLng) },
+        onStopDriveRecording = { creationLogic.stopAndPrepareSave(currentLatLng) }
     )
 }

@@ -23,6 +23,9 @@ import com.huawei.hms.maps.model.BitmapDescriptorFactory
 import com.huawei.hms.maps.model.LatLng
 import com.huawei.hms.maps.model.Marker
 import com.huawei.hms.maps.model.MarkerOptions
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -39,6 +42,11 @@ class CreationState(
 
     private var selectedType: WaypointType = WaypointType.START
     val trackDraft = TrackDraft()
+
+    var isLiveRecording by mutableStateOf(false)
+        private set
+    private val liveRecordedPoints = mutableListOf<LatLng>()
+    private var livePolyline: com.huawei.hms.maps.model.Polyline? = null
 
     private var startMarker: Marker? = null
     private var finishMarker: Marker? = null
@@ -99,6 +107,99 @@ class CreationState(
             handleMarkerClick(clickedMarker)
             true // Returnăm 'true' pentru a spune hărții că am consumat noi acțiunea
         }
+    }
+
+    fun startLiveRecording(currentLocation: LatLng?) {
+        if (currentLocation == null) {
+            Toast.makeText(context, "Eroare: Nu avem semnal GPS valid!", Toast.LENGTH_SHORT).show()
+            return
+        }
+        cleanup() // Curățăm schițele anterioare
+        isLiveRecording = true
+
+        triggerTactileClick()
+
+        // Setează punctul de START fix unde te afli acum
+        val waypoint = Waypoint(currentLocation, WaypointType.START)
+        startMarker = addMarker(currentLocation, R.drawable.ic_start_marker)
+        trackDraft.start = waypoint
+
+        liveRecordedPoints.add(currentLocation)
+        Toast.makeText(context, "Înregistrare pornită din mers!", Toast.LENGTH_SHORT).show()
+    }
+
+    fun updateLiveLocation(latLng: LatLng) {
+        if (!isLiveRecording) return
+
+        // Evităm duplicatele consecutive strânse
+        if (liveRecordedPoints.isNotEmpty()) {
+            val lastPoint = liveRecordedPoints.last()
+            val results = FloatArray(1)
+            android.location.Location.distanceBetween(
+                lastPoint.latitude, lastPoint.longitude,
+                latLng.latitude, latLng.longitude,
+                results
+            )
+            if (results[0] < 3f) return // Dacă mașina s-a mișcat sub 3 metri, nu aglomerăm lista
+        }
+
+        liveRecordedPoints.add(latLng)
+        lastRoutedPoints = liveRecordedPoints.toList() // Salvăm punctele reale ca puncte finale!
+
+        // Actualizăm linia live pe hartă (fără OSRM, desenăm fix pe unde mergi!)
+        livePolyline?.remove()
+        livePolyline = huaweiMap?.addPolyline(
+            com.huawei.hms.maps.model.PolylineOptions()
+                .addAll(liveRecordedPoints)
+                .color(android.graphics.Color.parseColor("#FF6B35"))
+                .width(10f)
+                .jointType(com.huawei.hms.maps.model.JointType.ROUND)
+                .startCap(com.huawei.hms.maps.model.RoundCap())
+                .endCap(com.huawei.hms.maps.model.RoundCap())
+        )
+    }
+
+    /**
+     * Drops a checkpoint EXACTLY where the car is right now.
+     */
+    fun recordLiveCheckpoint(currentLocation: LatLng?) {
+        if (!isLiveRecording || currentLocation == null) return
+        triggerTactileClick()
+
+        val waypoint = Waypoint(currentLocation, WaypointType.CHECKPOINT)
+        trackDraft.checkpoints.add(waypoint)
+
+        val marker = addMarker(currentLocation, R.drawable.ic_checkpoint_marker)
+        checkpointMarkers.add(marker)
+
+        Toast.makeText(context, "Checkpoint înregistrat la locație!", Toast.LENGTH_SHORT).show()
+    }
+
+    /**
+     * Oprește înregistrarea și validează finish-ul.
+     */
+    fun stopAndPrepareSave(currentLocation: LatLng?) {
+        if (!isLiveRecording || currentLocation == null) return
+        isLiveRecording = false
+        triggerTactileClick()
+
+        if (trackDraft.raceType == RaceType.LAP_RACE) {
+            // Dacă e circuit, punctul final redevine startul
+            trackDraft.finish = trackDraft.start
+            trackDraft.start?.let { liveRecordedPoints.add(it.position) }
+        } else {
+            // Dacă e sprint, locația actuală devine FINISH-ul oficial
+            val waypoint = Waypoint(currentLocation, WaypointType.FINISH)
+            trackDraft.finish = waypoint
+            finishMarker = addMarker(currentLocation, R.drawable.ic_finish_marker)
+            liveRecordedPoints.add(currentLocation)
+        }
+
+        // Împrospătăm polilinia finală
+        livePolyline?.points = liveRecordedPoints.toList()
+
+        // Deschidem dialogul standard de salvare pe care îl aveai deja implementat
+        initiateSave()
     }
 
     private fun handleMarkerClick(marker: Marker) {

@@ -8,27 +8,32 @@ class RacingState(
     private val context: Context,
     private val onStateChange: (AppState) -> Unit
 ) {
-    // Înlocuim QuickRaceSession cu noul motor, folosind SPRINT ca bază
     val session = RaceSession(RaceType.SPRINT)
     private var isInitialized = false
 
-    fun update(speed: Int, latLng: com.huawei.hms.maps.model.LatLng?) {
+    fun start() {
         if (!isInitialized) {
             session.start()
             isInitialized = true
         }
+    }
+
+    fun update(speed: Int, latLng: com.huawei.hms.maps.model.LatLng?) {
+        if (!isInitialized) return // ← Nu mai pornim implicit din update
 
         latLng?.let {
-            // Cursă liberă, deci dăm 0 la punctele de control
             session.update(speed, it, totalCheckpoints = 0, passedCheckpoints = 0)
         }
     }
 
     fun stop() {
+        if (!isInitialized) return // ← Guard împotriva stop dublu
         saveRaceRecord()
         isInitialized = false
-        onStateChange(AppState.CRUISE)
     }
+
+    val isRunning: Boolean
+        get() = isInitialized
 
     private fun saveRaceRecord() {
         val manager = HistoryManager(context)
@@ -37,8 +42,8 @@ class RacingState(
             id = java.util.UUID.randomUUID().toString(),
             date = sdf.format(java.util.Date()),
             maxSpeed = session.maxSpeed,
-            distanceKm = session.getTotalDistanceKm(),       // Metoda corectă din RaceSession
-            durationSeconds = session.currentTimeMs / 1000   // Metoda corectă din RaceSession
+            distanceKm = session.getTotalDistanceKm(),
+            durationSeconds = session.currentTimeMs / 1000
         )
         manager.saveRace(record)
     }

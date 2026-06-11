@@ -31,6 +31,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.firstapp.AppState
+import com.example.firstapp.data.RaceType
 import com.example.trackappv2.R
 import com.huawei.hms.maps.CameraUpdateFactory
 import com.huawei.hms.maps.HuaweiMap
@@ -114,31 +115,36 @@ fun MapBackground(
     LaunchedEffect(appState, huaweiMapInstance, savedTracks) {
         val map = huaweiMapInstance ?: return@LaunchedEffect
 
-        // Curățăm markerii vechi indiferent de stare
+        // Curățăm pinii vechi la fiecare actualizare ca să nu se dubleze
         savedTrackMarkers.forEach { it.remove() }
         savedTrackMarkers.clear()
 
-        // Desenăm markeri doar în Cruise
-        if (appState != AppState.CRUISE) return@LaunchedEffect
+        // Dacă ieșim din modul Cruise, harta rămâne curată
+        if (appState != AppState.CRUISE) {
+            return@LaunchedEffect
+        }
 
-        savedTracks.forEach { track ->
-            val marker = map.addMarker(
-                MarkerOptions()
-                    .position(track.start.toLatLng())
-                    .icon(savedTrackIcon)
-                    .title(track.name)
-                    .snippet(
-                        if (track.raceType == com.example.firstapp.data.RaceType.LAP_RACE)
-                            "Circuit (Ture)"
-                        else
-                            "Sprint (A → B)"
-                    )
-                    .anchorMarker(0.5f, 1f)
-            )
-            if (marker != null) {
-                marker.tag = track.id
-                savedTrackMarkers.add(marker)
+        // Dacă suntem în Cruise, desenăm cursele primite prin parametru
+        try {
+            val startIcon = vectorToBitmap(context, R.drawable.ic_start_marker)
+
+            // Iterăm direct prin lista reactivă, fără să mai facem IO/Database calls!
+            savedTracks.forEach { track ->
+                val marker = map.addMarker(
+                    MarkerOptions()
+                        .position(track.start.toLatLng())
+                        .icon(startIcon)
+                        .title(track.name)
+                        .snippet(if (track.raceType == RaceType.LAP_RACE) "Circuit (Ture)" else "Sprint (A → B)")
+                        .anchorMarker(0.5f, 1f)
+                )
+                if (marker != null) {
+                    marker.tag = track.id
+                    savedTrackMarkers.add(marker)
+                }
             }
+        } catch (e: Exception) {
+            android.util.Log.e("MapBackground", "Eroare la adăugarea pinilor de start", e)
         }
     }
 

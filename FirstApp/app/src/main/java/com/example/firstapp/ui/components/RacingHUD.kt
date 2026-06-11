@@ -46,10 +46,12 @@ fun RacingHUD(
     allLaps: List<LapData>,
     currentSplit: SplitData?,
     sprintProgress: Float,
+    hasRaceStarted: Boolean = true,
     onStopClick: () -> Unit,
     gForceX: Float = 0f, // NOU
     gForceY: Float = 0f, // NOU
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    ghostDeltaMs: Long? = null
 ) {
     // Formatăm timpul în MM:SS.CC
     val mins = currentLapTimeMs / 60000
@@ -59,6 +61,8 @@ fun RacingHUD(
 
     val raceType = selectedTrack?.raceType ?: RaceType.SPRINT
     val currentLap = (allLaps.size + 1)
+
+
 
     Box(modifier = modifier.fillMaxSize()) {
 
@@ -73,16 +77,65 @@ fun RacingHUD(
                     MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.85f),
                     CutCornerShape(bottomEnd = 16.dp)
                 )
-                .border(
-                    1.dp,
-                    MaterialTheme.colorScheme.outlineVariant,
-                    CutCornerShape(bottomEnd = 16.dp)
-                )
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CutCornerShape(bottomEnd = 16.dp))
                 .padding(horizontal = 20.dp, vertical = 12.dp)
         ) {
             Column(horizontalAlignment = Alignment.Start) {
-                Text("TIME", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-                Text(timeString, color = MaterialTheme.colorScheme.onSurface, fontSize = 24.sp, fontWeight = FontWeight.Black, fontStyle = FontStyle.Italic)
+                if (hasRaceStarted) {
+                    Text("TIME", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                    Text(timeString, color = MaterialTheme.colorScheme.onSurface, fontSize = 24.sp, fontWeight = FontWeight.Black, fontStyle = FontStyle.Italic)
+                } else {
+                    Text("STATUS", color = MaterialTheme.colorScheme.primary, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                    Text("READY...", color = Color(0xFFFFD700), fontSize = 24.sp, fontWeight = FontWeight.Black, fontStyle = FontStyle.Italic)
+                }
+            }
+        }
+
+        //GHOST
+        ghostDeltaMs?.let { delta ->
+            val isFaster = delta <= 0
+            val absMs = kotlin.math.abs(delta)
+            val secs = absMs / 1000
+            val millis = (absMs % 1000) / 10
+            val prefix = if (isFaster) "▲ -" else "▼ +"
+            val deltaColor = when {
+                delta < -1000 -> Color(0xFF00E676)  // Verde intens — >1s avantaj
+                delta < 0     -> Color(0xFF69F0AE)  // Verde deschis
+                delta < 1000  -> Color(0xFFFFD740)  // Galben — aproape egal
+                else          -> BrakeRed           // Roșu — în urmă
+            }
+
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(top = 100.dp, start = 16.dp)
+                    .background(
+                        MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.85f),
+                        CutCornerShape(bottomEnd = 12.dp)
+                    )
+                    .border(
+                        1.dp,
+                        deltaColor.copy(alpha = 0.5f),
+                        CutCornerShape(bottomEnd = 12.dp)
+                    )
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                Column(horizontalAlignment = Alignment.Start) {
+                    Text(
+                        text = "GHOST",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 2.sp
+                    )
+                    Text(
+                        text = "$prefix${secs}.${String.format("%02d", millis)}",
+                        color = deltaColor,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Black,
+                        fontStyle = FontStyle.Italic
+                    )
+                }
             }
         }
 
@@ -182,8 +235,6 @@ fun RacingHUD(
         // ==========================================
         // 5. ZONA JOS-DREAPTA: Grafic G-Meter (Placeholder vizual)
         // ==========================================
-
-
         Box(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -229,6 +280,26 @@ fun RacingHUD(
             Text("G", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(top = 16.dp, end = 24.dp))
+        }
+
+        // ==========================================
+        // BANNER AUTO-START (CENTRU)
+        // ==========================================
+        if (!hasRaceStarted) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 100.dp)
+                    .background(BrakeRed.copy(alpha = 0.9f), CutCornerShape(8.dp))
+                    .padding(horizontal = 24.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    text = "ACCELEREAZĂ PESTE 10 KM/H LA START!",
+                    color = Color.White,
+                    fontWeight = FontWeight.Black,
+                    fontSize = 14.sp
+                )
+            }
         }
 
         // ==========================================

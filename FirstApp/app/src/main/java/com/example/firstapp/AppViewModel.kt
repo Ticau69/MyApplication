@@ -6,6 +6,9 @@ import android.content.Intent
 import android.location.LocationManager
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.firstapp.data.GhostFrame
+import com.example.firstapp.data.GhostRepository
+import com.example.firstapp.data.GhostRun
 import com.example.firstapp.data.LapData
 import com.example.firstapp.data.RaceType
 import com.example.firstapp.data.SplitData
@@ -13,6 +16,7 @@ import com.example.firstapp.data.Track
 import com.example.firstapp.data.TrackRepository
 import com.example.firstapp.racing.HistoryManager
 import com.example.firstapp.racing.RaceRecord
+import com.example.firstapp.racing.VoiceCopilot
 import com.example.firstapp.service.LocationForegroundService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -25,12 +29,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
-    private val context = application.applicationContext
-    private val trackRepository = TrackRepository(context)
-    private val historyManager = HistoryManager(context)
-    private val locationTracker = LocationTracker(context)
+    private val trackRepository = TrackRepository(application)
+    private val historyManager = HistoryManager(application)
+    private val ghostRepository = GhostRepository(application)
 
-    // --- CountDonw ---
+
+
+    // --- Countdown ---
     private val _countdownValue = MutableStateFlow<Int?>(null)
     val countdownValue = _countdownValue.asStateFlow()
 
@@ -70,15 +75,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _raceHistory = MutableStateFlow<List<RaceRecord>>(emptyList())
     val raceHistory = _raceHistory.asStateFlow()
 
+    // --- Nearby Events (Proximity Trigger) ---
+    private val _nearbyTrack = MutableStateFlow<Track?>(null)
+    val nearbyTrack = _nearbyTrack.asStateFlow()
+
+    private val _distanceToNearbyTrack = MutableStateFlow<Int?>(null)
+    val distanceToNearbyTrack = _distanceToNearbyTrack.asStateFlow()
+
+    private var nearbyDismissJob: Job? = null
+    private var lastDismissedTrackId: String? = null
+
     // --- Transitions ---
     fun transitionTo(state: AppState) {
         _appState.value = state
-        // Reîncărcăm datele când revenim în stări relevante
         when (state) {
             AppState.SAVED_TRACKS -> loadSavedTracks()
             AppState.HISTORY -> loadRaceHistory()
             AppState.CRUISE -> {
-                loadSavedTracks() // Refresh după salvare traseu
+                loadSavedTracks()
                 _selectedTrack.value = null
             }
             else -> {}
@@ -114,10 +128,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (granted) startTracking()
     }
 
+    // Folosim getApplication() direct pentru a evita orice confuzie a compilatorului
+    private val voiceCopilot = VoiceCopilot(getApplication<Application>().applicationContext)
+
     // --- GPS Check ---
     private var gpsMonitorJob: Job? = null
     fun checkGpsStatus() {
-        val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        val locationManager = getApplication<Application>().getSystemService(Context.LOCATION_SERVICE) as LocationManager
         _isGpsEnabled.value = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
     }
 
@@ -126,7 +143,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         gpsMonitorJob = viewModelScope.launch {
             while (isActive) {
                 checkGpsStatus()
-                delay(5000) // 5s e suficient
+                delay(5000)
             }
         }
     }
@@ -138,7 +155,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     // --- Location Tracking ---
     fun startTracking() {
-        // Locație inițială din cache
         val tracker = LocationTracker(getApplication())
         tracker.getLastKnownLocation { data ->
             data?.let {
@@ -147,7 +163,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        // Pornim serviciul — el gestionează tracking-ul
         val intent = Intent(getApplication(), LocationForegroundService::class.java).apply {
             action = LocationForegroundService.ACTION_START
         }
@@ -166,7 +181,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _currentBearing.value = bearing
     }
 
-    // --- Data Loading (pe IO thread) ---
+    // --- Data Loading ---
     fun loadSavedTracks() {
         viewModelScope.launch {
             val tracks = withContext(Dispatchers.IO) {
@@ -197,6 +212,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         super.onCleared()
         stopGpsMonitoring()
+        nearbyDismissJob?.cancel()
+        voiceCopilot.destroy()
     }
 
     data class RaceFinishData(
@@ -238,6 +255,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _lastLapNotification.value = LapNotification(lap, isBest)
         _allLaps.value = laps.toList()
 
+        if (_isTtsEnabled.value) {
+            voiceCopilot.speakLap(lap.lapNumber, lap.lapTimeMs)
+        }
+
         // Ascundem notificarea după 4 secunde
         viewModelScope.launch {
             delay(4000)
@@ -256,25 +277,148 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val sprintProgress = _sprintProgress.asStateFlow()
 
     init {
-        // Pornim colectarea locației imediat ce ViewModel-ul este creat.
-        // Folosim o colectare sigură pentru a evita orice race condition la inițializarea flow-urilor.
+        loadSavedTracks()
         viewModelScope.launch {
             LocationTracker.sharedLocationFlow.collect { data ->
                 _currentLatLng.value = data.latLng
                 _currentSpeed.value = data.speed
+                checkNearbyTracks(data.latLng)
             }
         }
     }
 
     fun onSplitRecorded(split: SplitData) {
         _currentSplit.value = split
+
+        // Verificăm dacă utilizatorul vrea copilot audio
+        if (_isTtsEnabled.value) {
+            voiceCopilot.speakCheckpoint(split.checkpointName, split.deltaVsBestMs)
+        }
+
         viewModelScope.launch {
-            delay(3000) // Ascundem după 3 secunde
+            delay(3000)
             _currentSplit.value = null
         }
     }
 
     fun updateSprintProgress(progress: Float) {
         _sprintProgress.value = progress
+    }
+
+    private val _ghostDeltaMs = MutableStateFlow<Long?>(null)
+    val ghostDeltaMs = _ghostDeltaMs.asStateFlow()
+
+    private val _currentGhostRun = MutableStateFlow<GhostRun?>(null)
+    val currentGhostRun = _currentGhostRun.asStateFlow()
+
+    fun loadGhostForTrack(trackId: String) {
+        viewModelScope.launch {
+            val ghost = withContext(Dispatchers.IO) {
+                ghostRepository.getBestRun(trackId)
+            }
+            _currentGhostRun.value = ghost
+        }
+    }
+
+    fun onGhostDeltaUpdated(deltaMs: Long) {
+        _ghostDeltaMs.value = deltaMs
+    }
+
+    fun saveGhostRun(trackId: String, frames: List<GhostFrame>, totalTimeMs: Long) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                ghostRepository.saveBestRun(
+                    GhostRun(
+                        trackId = trackId,
+                        lapNumber = 1,
+                        totalTimeMs = totalTimeMs,
+                        frames = frames
+                    )
+                )
+            }
+        }
+    }
+
+    private fun checkNearbyTracks(currentPos: com.huawei.hms.maps.model.LatLng) {
+        if (_appState.value != AppState.CRUISE) {
+            if (_nearbyTrack.value != null) {
+                _nearbyTrack.value = null
+                _distanceToNearbyTrack.value = null
+            }
+            return
+        }
+
+        var closestTrack: Track? = null
+        var minDistance = Float.MAX_VALUE
+        val results = FloatArray(1)
+
+        for (track in _savedTracks.value) {
+            val startPos = track.start.toLatLng()
+            android.location.Location.distanceBetween(
+                currentPos.latitude, currentPos.longitude,
+                startPos.latitude, startPos.longitude,
+                results
+            )
+            val distance = results[0]
+
+            if (distance < minDistance) {
+                minDistance = distance
+                closestTrack = track
+            }
+        }
+
+        val detectionRadius = 200f
+
+        if (closestTrack != null && minDistance <= detectionRadius) {
+            if (lastDismissedTrackId == closestTrack.id && minDistance < 400f) {
+                _distanceToNearbyTrack.value = minDistance.toInt()
+                return
+            }
+            
+            if (lastDismissedTrackId == closestTrack.id && minDistance >= 400f) {
+                lastDismissedTrackId = null
+            }
+
+            if (_nearbyTrack.value?.id != closestTrack.id) {
+                _nearbyTrack.value = closestTrack
+                
+                nearbyDismissJob?.cancel()
+                nearbyDismissJob = viewModelScope.launch {
+                    delay(10000)
+                    lastDismissedTrackId = _nearbyTrack.value?.id
+                    _nearbyTrack.value = null
+                    _distanceToNearbyTrack.value = null
+                }
+            }
+            _distanceToNearbyTrack.value = minDistance.toInt()
+        } else {
+            if (_nearbyTrack.value != null) {
+                nearbyDismissJob?.cancel()
+                _nearbyTrack.value = null
+                _distanceToNearbyTrack.value = null
+            }
+            if (minDistance > 500f) {
+                lastDismissedTrackId = null
+            }
+        }
+    }
+
+    // --- APP SETTINGS (PERSISTENTE) ---
+    private val settingsPrefs = getApplication<Application>().getSharedPreferences("velocity_settings", Context.MODE_PRIVATE)
+
+    private val _isTtsEnabled = MutableStateFlow<Boolean>(settingsPrefs.getBoolean("tts_enabled", true))
+    val isTtsEnabled = _isTtsEnabled.asStateFlow()
+
+    private val _proximityRadius = MutableStateFlow<Int>(settingsPrefs.getInt("proximity_radius", 200))
+    val proximityRadius = _proximityRadius.asStateFlow()
+
+    fun setTtsEnabled(enabled: Boolean) {
+        _isTtsEnabled.value = enabled
+        settingsPrefs.edit().putBoolean("tts_enabled", enabled).apply()
+    }
+
+    fun setProximityRadius(radius: Int) {
+        _proximityRadius.value = radius
+        settingsPrefs.edit().putInt("proximity_radius", radius).apply()
     }
 }

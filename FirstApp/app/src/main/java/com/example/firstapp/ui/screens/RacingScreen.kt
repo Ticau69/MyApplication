@@ -22,7 +22,9 @@ fun RacingScreen(
     sprintProgress: Float,
     gForceX: Float,
     gForceY: Float,
-    onStopClick: () -> Unit
+    hasRaceStarted: Boolean,
+    onStopClick: () -> Unit,
+    ghostDeltaMs: Long? = null
 ) {
     RacingHUD(
         speed = speed,
@@ -35,6 +37,8 @@ fun RacingScreen(
         sprintProgress = sprintProgress,
         gForceX = gForceX,
         gForceY = gForceY,
-        onStopClick = onStopClick
+        hasRaceStarted = hasRaceStarted,
+        onStopClick = onStopClick,
+        ghostDeltaMs = ghostDeltaMs
     )
 }

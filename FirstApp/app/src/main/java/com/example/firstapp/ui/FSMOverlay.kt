@@ -8,6 +8,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
@@ -26,6 +27,7 @@ import com.example.firstapp.ui.screens.*
 import com.huawei.hms.maps.HuaweiMap
 import com.huawei.hms.maps.model.LatLng
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
@@ -50,8 +52,17 @@ fun FSMOverlay(
     val allLaps by viewModel.allLaps.collectAsState()
     val currentSplit by viewModel.currentSplit.collectAsState()
     val sprintProgress by viewModel.sprintProgress.collectAsState()
+    val ghostDeltaMs by viewModel.ghostDeltaMs.collectAsState()
+    val currentGhostRun by viewModel.currentGhostRun.collectAsState()
+    val nearbyTrack by viewModel.nearbyTrack.collectAsState()
+    val distanceToNearbyTrack by viewModel.distanceToNearbyTrack.collectAsState()
 
-    // Logic classes — instanțiate o singură dată
+    var hasRaceStarted by remember { mutableStateOf(false) }
+
+    val isTtsEnabled by viewModel.isTtsEnabled.collectAsState()
+    val proximityRadius by viewModel.proximityRadius.collectAsState()
+
+    // Logic classes
     val cruiseLogic = remember { CruiseState(context, onStateChange) }
     val creationLogic = remember { CreationState(context, onStateChange, scope) }
     val savedTracksLogic = remember { SavedTracksState(context, huaweiMap) }
@@ -82,52 +93,106 @@ fun FSMOverlay(
         }
     }
 
-    // TrackRacingState — creat când avem track și hartă
-    LaunchedEffect(selectedTrack, huaweiMap) {
-        if (selectedTrack != null && huaweiMap != null) {
-            trackRacingLogic.value = TrackRacingState(
-                context = context,
-                onStateChange = onStateChange,
-                track = selectedTrack,
-                huaweiMap = huaweiMap,
-                onRaceFinished = { data -> viewModel.onRaceFinished(data) },
-                onSplitRecorded = { split -> viewModel.onSplitRecorded(split) },
-                onLapCompleted = { lap ->
-                    trackRacingLogic.value?.let { logic ->
-                        viewModel.onLapCompleted(lap, logic.session.laps)
-                    }
-                }
-            )
-        }
+    // Încarcă ghost când se selectează un traseu
+    LaunchedEffect(selectedTrack) {
+        selectedTrack?.let { viewModel.loadGhostForTrack(it.id) }
     }
 
-    // Update timp tur și progres sprint
+    // UN SINGUR LaunchedEffect pentru TrackRacingState — cu ghost inclus
+    LaunchedEffect(selectedTrack, huaweiMap, currentGhostRun) {
+        if (selectedTrack == null || huaweiMap == null) return@LaunchedEffect
+
+        // Curățăm instanța veche dacă există
+        trackRacingLogic.value?.cleanup()
+
+        trackRacingLogic.value = TrackRacingState(
+            context = context,
+            onStateChange = onStateChange,
+            track = selectedTrack,
+            huaweiMap = huaweiMap,
+            ghostRun = currentGhostRun,
+            onRaceFinished = { data ->
+                trackRacingLogic.value?.let { logic ->
+                    viewModel.saveGhostRun(
+                        trackId = selectedTrack.id,
+                        frames = logic.getCurrentGhostFrames(),
+                        totalTimeMs = data.durationSeconds * 1000
+                    )
+                }
+                viewModel.onRaceFinished(data)
+            },
+            onSplitRecorded = { split -> viewModel.onSplitRecorded(split) },
+            onLapCompleted = { lap ->
+                trackRacingLogic.value?.let { logic ->
+                    viewModel.onLapCompleted(lap, logic.session.laps)
+                }
+            },
+            onGhostDeltaUpdated = { delta ->
+                viewModel.onGhostDeltaUpdated(delta)
+            }
+        )
+    }
+
+    // Pornire RACING — o singură dată când intrăm în stare
     LaunchedEffect(state) {
-        while (state == AppState.TRACK_RACING) {
-            delay(100.milliseconds)
-            trackRacingLogic.value?.let { logic ->
-                viewModel.updateLapTime(logic.session.currentLapTimeMs)
-                viewModel.updateSprintProgress(logic.progressFraction)
+        when (state) {
+            AppState.RACING -> {
+                racingLogic.start()
+                hasRaceStarted = true
+            }
+            AppState.TRACK_RACING -> {
+                hasRaceStarted = false // Va deveni true când TrackRacingState confirmă
+            }
+            else -> {
+                hasRaceStarted = false
             }
         }
     }
 
-    // Update sesiune de cursă
-    LaunchedEffect(speed, latLng) {
-        if (state == AppState.RACING) racingLogic.update(speed, latLng)
-        if (state == AppState.TRACK_RACING) trackRacingLogic.value?.update(speed, latLng)
-    }
-
-    // Tick pentru timer
-    var tick by remember { mutableLongStateOf(0L) }
+    // Timer loop — se oprește corect când starea se schimbă
     LaunchedEffect(state) {
-        while (state == AppState.RACING || state == AppState.TRACK_RACING) {
-            delay(1.seconds)
-            tick++
+        when (state) {
+            AppState.RACING -> {
+                while (isActive) {
+                    delay(100.milliseconds)
+                    if (!racingLogic.isRunning) break // ← Ieșim dacă s-a oprit
+                    viewModel.updateLapTime(racingLogic.session.currentTimeMs)
+                }
+            }
+            AppState.TRACK_RACING -> {
+                while (isActive) {
+                    delay(100.milliseconds)
+                    trackRacingLogic.value?.let { logic ->
+                        viewModel.updateLapTime(logic.session.currentLapTimeMs)
+                        viewModel.updateSprintProgress(logic.progressFraction)
+                        hasRaceStarted = logic.hasRaceStarted
+                    }
+                }
+            }
+            else -> {
+                // Resetăm timerul când ieșim din cursă
+                viewModel.updateLapTime(0L)
+                viewModel.updateSprintProgress(0f)
+            }
         }
     }
 
-    // Cleanup
+    // Update locație și viteză
+    LaunchedEffect(speed, latLng) {
+        if (state == AppState.RACING && racingLogic.isRunning) {
+            racingLogic.update(speed, latLng)
+        }
+        if (state == AppState.TRACK_RACING) {
+            trackRacingLogic.value?.update(speed, latLng)
+        }
+        if (state == AppState.RACE_CREATION &&
+            creationLogic.isLiveRecording &&
+            latLng != null) {
+            creationLogic.updateLiveLocation(latLng)
+        }
+    }
+
+    // Cleanup la distrugere
     DisposableEffect(Unit) {
         onDispose { cruiseLogic.onDestroy() }
     }
@@ -150,9 +215,15 @@ fun FSMOverlay(
         ) { targetState ->
             when (targetState) {
                 AppState.CRUISE -> CruiseScreen(
+                    nearbyTrack = nearbyTrack,
+                    distanceToTrack = distanceToNearbyTrack,
                     onStateChange = onStateChange,
                     onStartCountdown = { onFinished ->
                         viewModel.startCountdown(onFinished)
+                    },
+                    onStartNearbyRace = { track ->
+                        viewModel.selectTrack(track)
+                        onStateChange(AppState.TRACK_RACING)
                     }
                 )
 
@@ -168,12 +239,24 @@ fun FSMOverlay(
                     sprintProgress = sprintProgress,
                     gForceX = currentGx,
                     gForceY = currentGy,
-                    onStopClick = { onStateChange(AppState.CRUISE) }
+                    ghostDeltaMs = ghostDeltaMs,
+                    hasRaceStarted = if (targetState == AppState.TRACK_RACING)
+                        hasRaceStarted else true,
+                    onStopClick = {
+                        if (targetState == AppState.RACING) {
+                            racingLogic.stop()
+                            onStateChange(AppState.CRUISE)
+                        } else {
+                            trackRacingLogic.value?.cleanup()
+                            onStateChange(AppState.CRUISE)
+                        }
+                    }
                 )
 
                 AppState.RACE_CREATION -> CreationScreen(
                     creationLogic = creationLogic,
                     huaweiMap = huaweiMap,
+                    currentLatLng = latLng,
                     onStateChange = onStateChange
                 )
 
@@ -194,6 +277,14 @@ fun FSMOverlay(
                 AppState.HISTORY -> HistoryScreen(
                     raceHistory = raceHistory,
                     onStateChange = onStateChange
+                )
+
+                AppState.SETTINGS -> SettingsScreen(
+                    isTtsEnabled = isTtsEnabled,
+                    proximityRadius = proximityRadius,
+                    onTtsToggle = { viewModel.setTtsEnabled(it) },
+                    onRadiusChange = { viewModel.setProximityRadius(it) },
+                    onBackClick = { onStateChange(AppState.CRUISE) }
                 )
             }
         }

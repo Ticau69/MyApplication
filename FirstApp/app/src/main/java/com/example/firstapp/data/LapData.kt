@@ -13,4 +13,6 @@ data class LapData(
             val millis = (lapTimeMs % 1000) / 10
             return String.format("%02d:%02d.%02d", mins, secs, millis)
         }
+
+
 }

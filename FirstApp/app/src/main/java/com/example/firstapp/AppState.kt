@@ -6,5 +6,6 @@ enum class AppState {
     TRACK_RACING,
     RACE_CREATION,
     HISTORY,
-    SAVED_TRACKS
+    SAVED_TRACKS,
+    SETTINGS
 }

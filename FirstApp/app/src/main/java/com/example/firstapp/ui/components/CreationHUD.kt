@@ -40,6 +40,11 @@ fun CreationHUD(
     onCancel: () -> Unit,
     selectedRaceType: RaceType,
     onRaceTypeChanged: (RaceType) -> Unit,
+    // NOILE CALLBACK-URI PENTRU DRIVE MODE
+    isRecording: Boolean,
+    onStartDriveRecording: () -> Unit,
+    onRecordDriveCheckpoint: () -> Unit,
+    onStopDriveRecording: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var currentCreationMode by remember { mutableStateOf(CreationMode.MANUAL) }
@@ -49,71 +54,102 @@ fun CreationHUD(
         // ==========================================
         // 1. ZONA SUS: Mod Creare (Manual / În mers)
         // ==========================================
-        Row(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 40.dp)
-                .height(44.dp)
-                .background(MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.85f), RoundedCornerShape(22.dp))
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(22.dp))
-                .padding(4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(modifier = Modifier
-                .fillMaxHeight()
-                .clip(RoundedCornerShape(18.dp))
-                .clickable { currentCreationMode = CreationMode.MANUAL }
-                .background(if (currentCreationMode == CreationMode.MANUAL) MaterialTheme.colorScheme.primary else Color.Transparent)
-                .padding(horizontal = 20.dp),
-                contentAlignment = Alignment.Center
+        // Ascundem selectorul de mod în timpul înregistrării active pentru a evita bug-uri
+        if (!isRecording) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 40.dp)
+                    .height(44.dp)
+                    .background(MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.85f), RoundedCornerShape(22.dp))
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(22.dp))
+                    .padding(4.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("MANUAL", color = if (currentCreationMode == CreationMode.MANUAL) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Black, fontSize = 11.sp, letterSpacing = 1.sp)
-            }
+                Box(modifier = Modifier
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(18.dp))
+                    .clickable { currentCreationMode = CreationMode.MANUAL }
+                    .background(if (currentCreationMode == CreationMode.MANUAL) MaterialTheme.colorScheme.primary else Color.Transparent)
+                    .padding(horizontal = 20.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("MANUAL", color = if (currentCreationMode == CreationMode.MANUAL) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Black, fontSize = 11.sp, letterSpacing = 1.sp)
+                }
 
-            Box(modifier = Modifier
-                .fillMaxHeight()
-                .clip(RoundedCornerShape(18.dp))
-                .clickable { currentCreationMode = CreationMode.DRIVE }
-                .background(if (currentCreationMode == CreationMode.DRIVE) BrakeRed else Color.Transparent)
-                .padding(horizontal = 20.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("ÎN MERS", color = if (currentCreationMode == CreationMode.DRIVE) Color.White else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Black, fontSize = 11.sp, letterSpacing = 1.sp)
+                Box(modifier = Modifier
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(18.dp))
+                    .clickable { currentCreationMode = CreationMode.DRIVE }
+                    .background(if (currentCreationMode == CreationMode.DRIVE) BrakeRed else Color.Transparent)
+                    .padding(horizontal = 20.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("ÎN MERS", color = if (currentCreationMode == CreationMode.DRIVE) Color.White else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Black, fontSize = 11.sp, letterSpacing = 1.sp)
+                }
             }
         }
 
         // ==========================================
-        // 2. ZONA DREAPTA: Pini Hartă + Buton Salvează
+        // 2. CONȚINUT DINAMIC (MANUAL vs DRIVE)
         // ==========================================
-        Column(
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .padding(end = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            horizontalAlignment = Alignment.End
-        ) {
-            MapSideButton("START", textColor = MaterialTheme.colorScheme.onPrimary, bgColor = MaterialTheme.colorScheme.primary, isActive = activeMode == WaypointType.START, onClick = onAddStart)
-            MapSideButton("+ CP", textColor = MaterialTheme.colorScheme.onSurface, bgColor = MaterialTheme.colorScheme.surfaceContainerLowest, hasBorder = true, isActive = activeMode == WaypointType.CHECKPOINT, onClick = onAddCheckpoint)
+        if (currentCreationMode == CreationMode.MANUAL) {
+            // --- UI MANUAL (Existent) ---
+            Column(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalAlignment = Alignment.End
+            ) {
+                MapSideButton("START", textColor = MaterialTheme.colorScheme.onPrimary, bgColor = MaterialTheme.colorScheme.primary, isActive = activeMode == WaypointType.START, onClick = onAddStart)
+                MapSideButton("+ CP", textColor = MaterialTheme.colorScheme.onSurface, bgColor = MaterialTheme.colorScheme.surfaceContainerLowest, hasBorder = true, isActive = activeMode == WaypointType.CHECKPOINT, onClick = onAddCheckpoint)
 
-            if (selectedRaceType != RaceType.LAP_RACE) {
-                MapSideButton("FINISH", textColor = MaterialTheme.colorScheme.onPrimary, bgColor = MaterialTheme.colorScheme.primary, isActive = activeMode == WaypointType.FINISH, onClick = onAddFinish)
+                if (selectedRaceType != RaceType.LAP_RACE) {
+                    MapSideButton("FINISH", textColor = MaterialTheme.colorScheme.onPrimary, bgColor = MaterialTheme.colorScheme.primary, isActive = activeMode == WaypointType.FINISH, onClick = onAddFinish)
+                }
             }
-        }
 
-        // ==========================================
-        // Butonul de salvare
-        // ==========================================
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(bottom = 15.dp, end = 16.dp)
-        ){
-            MapSideButton(
-                "SALVEAZĂ",
-                textColor = MaterialTheme.colorScheme.onPrimary,
-                bgColor = MaterialTheme.colorScheme.primary,
-                onClick = onSaveTrack,
-            )
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(bottom = 15.dp, end = 16.dp)
+            ){
+                MapSideButton("SALVEAZĂ", textColor = MaterialTheme.colorScheme.onPrimary, bgColor = MaterialTheme.colorScheme.primary, onClick = onSaveTrack)
+            }
+        } else {
+            // --- UI DRIVE MODE (ÎN MERS) ---
+            Column(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalAlignment = Alignment.End
+            ) {
+                if (!isRecording) {
+                    MapSideButton(
+                        "START REC",
+                        textColor = Color.White,
+                        bgColor = BrakeRed,
+                        onClick = onStartDriveRecording
+                    )
+                } else {
+                    MapSideButton(
+                        "+ CP",
+                        textColor = MaterialTheme.colorScheme.onSurface,
+                        bgColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+                        hasBorder = true,
+                        onClick = onRecordDriveCheckpoint
+                    )
+                    
+                    MapSideButton(
+                        "STOP & SAVE",
+                        textColor = Color.White,
+                        bgColor = MaterialTheme.colorScheme.primary,
+                        onClick = onStopDriveRecording
+                    )
+                }
+            }
         }
 
 
@@ -234,7 +270,11 @@ fun PreviewCreationHUD() {
             onSaveTrack = {},
             onCancel = {},
             selectedRaceType = mockRaceType,
-            onRaceTypeChanged = { mockRaceType = it }
+            onRaceTypeChanged = { mockRaceType = it },
+            isRecording = false,
+            onStartDriveRecording = {},
+            onRecordDriveCheckpoint = {},
+            onStopDriveRecording = {}
         )
     }
 }
