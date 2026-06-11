@@ -46,6 +46,8 @@ class TrackRacingState(
         private set
     private var passedCheckpoints = 0
 
+    private var lastMatchedGhostIndex = 0
+
     // Polilinii pe hartă
     private var trackPolyline: Polyline? = null
     private var gpsTrailPolyline: Polyline? = null
@@ -233,21 +235,32 @@ class TrackRacingState(
         ghostMarker?.position = ghostPos.toLatLng()
         ghostMarker?.rotation = ghostBearing
 
-        // Calculăm delta: Găsim momentul de timp când FANTOMA a trecut prin locul în care ești TU ACUM
-        val nearestGhostFrameIndex = ghost.frames.indexOfFirst { frame ->
-            val results = FloatArray(1)
+        // FEREASTRĂ GLISANTĂ O(1) relativ constant, în loc de O(N) masiv
+        // Verificăm doar 20 frame-uri în spate și 50 înainte de la ultima poziție știută
+        val windowStart = maxOf(0, lastMatchedGhostIndex - 20)
+        val windowEnd = minOf(ghost.frames.size, lastMatchedGhostIndex + 50)
+
+        var bestIndex = -1
+        var minDistance = Float.MAX_VALUE
+        val results = FloatArray(1)
+
+        for (i in windowStart until windowEnd) {
+            val frame = ghost.frames[i]
             android.location.Location.distanceBetween(
                 frame.position.latitude, frame.position.longitude,
-                playerPos.latitude, playerPos.longitude, // <-- REPARAT: Aici trebuie să fie playerPos, nu ghostPos!
+                playerPos.latitude, playerPos.longitude,
                 results
             )
-            results[0] < 20f // În raza de 20m
+
+            if (results[0] < 20f && results[0] < minDistance) {
+                minDistance = results[0]
+                bestIndex = i
+            }
         }
 
-        if (nearestGhostFrameIndex >= 0) {
-            val ghostTimeAtOurPosition = ghost.frames[nearestGhostFrameIndex].timeMs
-            // Delta = Timpul tău actual MINUS Timpul la care a ajuns fantoma aici
-            // Negativ (-) înseamnă că ești mai rapid. Pozitiv (+) înseamnă că ești în urmă.
+        if (bestIndex >= 0) {
+            lastMatchedGhostIndex = bestIndex // Actualizăm cursorul pentru următoarea trecere
+            val ghostTimeAtOurPosition = ghost.frames[bestIndex].timeMs
             val delta = currentTimeMs - ghostTimeAtOurPosition
             onGhostDeltaUpdated(delta)
         }

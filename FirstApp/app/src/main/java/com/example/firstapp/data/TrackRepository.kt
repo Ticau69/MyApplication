@@ -20,6 +20,7 @@ class TrackRepository(context: Context) {
         val track = Track(
             id = java.util.UUID.randomUUID().toString(),
             name = name,
+            raceType = draft.raceType,
             createdAt = java.text.SimpleDateFormat(
                 "yyyy-MM-dd HH:mm",
                 java.util.Locale.getDefault()

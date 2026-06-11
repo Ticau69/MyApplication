@@ -42,7 +42,7 @@ fun RacingHUD(
     currentLatLng: LatLng?,
     selectedTrack: Track?,
     currentLapTimeMs: Long,
-    lastLapNotification: AppViewModel.LapNotification?,
+    lastLapNotification: com.example.firstapp.managers.TelemetryManager.LapNotification?,
     allLaps: List<LapData>,
     currentSplit: SplitData?,
     sprintProgress: Float,

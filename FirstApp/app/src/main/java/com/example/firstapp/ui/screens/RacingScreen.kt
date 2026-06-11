@@ -2,7 +2,6 @@ package com.example.firstapp.ui.screens
 
 import androidx.compose.runtime.Composable
 import com.example.firstapp.AppState
-import com.example.firstapp.AppViewModel
 import com.example.firstapp.data.LapData
 import com.example.firstapp.data.SplitData
 import com.example.firstapp.data.Track
@@ -16,7 +15,7 @@ fun RacingScreen(
     latLng: LatLng?,
     selectedTrack: Track?,
     currentLapTimeMs: Long,
-    lastLapNotification: AppViewModel.LapNotification?,
+    lastLapNotification: com.example.firstapp.managers.TelemetryManager.LapNotification?,
     allLaps: List<LapData>,
     currentSplit: SplitData?,
     sprintProgress: Float,

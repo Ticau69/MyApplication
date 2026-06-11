@@ -134,7 +134,9 @@ fun FSMOverlay(
     }
 
     // Pornire RACING — o singură dată când intrăm în stare
+    // Pornire RACING și Timer Loop unificat
     LaunchedEffect(state) {
+        // 1. Faza de Setup
         when (state) {
             AppState.RACING -> {
                 racingLogic.start()
@@ -145,17 +147,17 @@ fun FSMOverlay(
             }
             else -> {
                 hasRaceStarted = false
+                viewModel.updateLapTime(0L)
+                viewModel.updateSprintProgress(0f)
             }
         }
-    }
 
-    // Timer loop — se oprește corect când starea se schimbă
-    LaunchedEffect(state) {
+        // 2. Faza de Loop (Timer)
         when (state) {
             AppState.RACING -> {
                 while (isActive) {
                     delay(100.milliseconds)
-                    if (!racingLogic.isRunning) break // ← Ieșim dacă s-a oprit
+                    if (!racingLogic.isRunning) break
                     viewModel.updateLapTime(racingLogic.session.currentTimeMs)
                 }
             }
@@ -169,11 +171,7 @@ fun FSMOverlay(
                     }
                 }
             }
-            else -> {
-                // Resetăm timerul când ieșim din cursă
-                viewModel.updateLapTime(0L)
-                viewModel.updateSprintProgress(0f)
-            }
+            else -> {}
         }
     }
 

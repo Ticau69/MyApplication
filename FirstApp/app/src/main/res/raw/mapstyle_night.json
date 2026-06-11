@@ -142,6 +142,11 @@
     }
   },
   {
+    "mapFeature": "poi.shopping",
+    "options": "all",
+    "visibility": false
+  },
+  {
     "mapFeature": "poi.shopping.shopping mall",
     "options": "labels.text.fill",
     "paint": {
@@ -513,6 +518,11 @@
     }
   },
   {
+    "mapFeature": "poi.beauty",
+    "options": "all",
+    "visibility": false
+  },
+  {
     "mapFeature": "poi.beauty.watsons",
     "options": "labels.text.fill",
     "paint": {
@@ -548,11 +558,21 @@
     }
   },
   {
+    "mapFeature": "poi.leisure",
+    "options": "all",
+    "visibility": false
+  },
+  {
     "mapFeature": "poi.eating&drinking",
     "options": "labels.text.fill",
     "paint": {
       "color": "#996E50"
     }
+  },
+  {
+    "mapFeature": "poi.eating&drinking",
+    "options": "all",
+    "visibility": false
   },
   {
     "mapFeature": "poi.eating&drinking.wawa food market",
@@ -737,6 +757,11 @@
     }
   },
   {
+    "mapFeature": "poi.lodging",
+    "options": "all",
+    "visibility": false
+  },
+  {
     "mapFeature": "poi.lodging.ibis",
     "options": "labels.text.fill",
     "paint": {
@@ -835,6 +860,11 @@
     }
   },
   {
+    "mapFeature": "poi.health-care",
+    "options": "all",
+    "visibility": false
+  },
+  {
     "mapFeature": "poi.health-care.watsons",
     "options": "labels.text.fill",
     "paint": {
@@ -849,6 +879,11 @@
     }
   },
   {
+    "mapFeature": "poi.public-service",
+    "options": "all",
+    "visibility": false
+  },
+  {
     "mapFeature": "poi.public-service.telstra",
     "options": "labels.text.fill",
     "paint": {
@@ -861,6 +896,11 @@
     "paint": {
       "color": "#6B6B9D"
     }
+  },
+  {
+    "mapFeature": "poi.business",
+    "options": "all",
+    "visibility": false
   },
   {
     "mapFeature": "poi.business.raiffeisenbank",
@@ -2563,5 +2603,25 @@
     "paint": {
       "color": "#801718"
     }
+  },
+  {
+    "mapFeature": "transit.other",
+    "options": "all",
+    "visibility": false
+  },
+  {
+    "mapFeature": "poi.sports",
+    "options": "all",
+    "visibility": false
+  },
+  {
+    "mapFeature": "landcover.business",
+    "options": "all",
+    "visibility": false
+  },
+  {
+    "mapFeature": "transit.rail-station",
+    "options": "all",
+    "visibility": false
   }
 ]

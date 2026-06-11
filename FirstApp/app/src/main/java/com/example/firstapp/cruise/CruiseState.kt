@@ -55,18 +55,24 @@ class CruiseState(
     }
 
     private fun loadTrackMarkers(map: HuaweiMap) {
-        val tracks = TrackRepository(context).getTracks()
-        val descriptor = bitmapDescriptorFromVector(context, R.drawable.ic_saved_track)
+        scope.launch {
+            // Executăm citirea din fișiere pe thread-ul IO
+            val tracks = kotlinx.coroutines.withContext(Dispatchers.IO) {
+                TrackRepository(context).getTracks()
+            }
 
-        tracks.forEach { track ->
-            val startLatLng = track.start.toLatLng()
-            val marker = map.addMarker(
-                MarkerOptions()
-                    .position(startLatLng)
-                    .icon(descriptor)
-                    .anchorMarker(0.5f, 1f)
-            )
-            trackMarkers[marker] = track
+            val descriptor = bitmapDescriptorFromVector(context, R.drawable.ic_saved_track)
+
+            tracks.forEach { track ->
+                val startLatLng = track.start.toLatLng()
+                val marker = map.addMarker(
+                    MarkerOptions()
+                        .position(startLatLng)
+                        .icon(descriptor)
+                        .anchorMarker(0.5f, 1f)
+                )
+                trackMarkers[marker] = track
+            }
         }
     }
 

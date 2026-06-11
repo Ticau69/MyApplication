@@ -23,8 +23,14 @@ data class GhostRun(
         if (currentTimeMs <= frames.first().timeMs) return Pair(frames.first().position, frames.first().bearing)
         if (currentTimeMs >= frames.last().timeMs) return Pair(frames.last().position, frames.last().bearing)
 
-        val nextIdx = frames.indexOfFirst { it.timeMs > currentTimeMs }
-        if (nextIdx == -1) return Pair(frames.last().position, frames.last().bearing)
+        // OPTIMIZARE CRITICĂ: Binary Search O(log N) în loc de O(N)
+        var nextIdx = frames.binarySearch { it.timeMs.compareTo(currentTimeMs) }
+        if (nextIdx < 0) {
+            nextIdx = -nextIdx - 1 // Poziția de inserție reprezintă primul frame cu timpul > currentTimeMs
+        }
+
+        if (nextIdx == 0) return Pair(frames.first().position, frames.first().bearing)
+        if (nextIdx >= frames.size) return Pair(frames.last().position, frames.last().bearing)
 
         val prevFrame = frames[nextIdx - 1]
         val nextFrame = frames[nextIdx]
