@@ -19,14 +19,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.example.firstapp.AppViewModel
+import com.example.firstapp.managers.TelemetryManager
 import com.example.firstapp.data.LapData
 import com.example.firstapp.data.RaceType
 import com.example.firstapp.data.SplitData
 
 @Composable
 fun RaceFinishDialog(
-    finishData: AppViewModel.RaceFinishData,
+    finishData: TelemetryManager.RaceFinishData,
     laps: List<LapData> = emptyList(),
     onDismiss: () -> Unit
 ) {
@@ -147,7 +147,7 @@ fun FinishStatItem(label: String, value: String, color: Color) {
 fun PreviewRaceFinishDialog() {
     // Notă: Dacă aceste clase (RaceFinishData, LapData) nu sunt structurate exact așa în proiect,
     // acest Preview va trebui comentat sau adaptat conform constructorilor reali.
-    val mockFinishData = AppViewModel.RaceFinishData(
+    val mockFinishData = TelemetryManager.RaceFinishData(
         durationSeconds = 418,
         maxSpeed = 156,
         distanceKm = 12.45,

@@ -7,18 +7,20 @@ val localProperties = Properties().apply {
 
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.huawei.agconnect)
+    alias(libs.plugins.ksp)
 }
 
 android {
     namespace = "com.example.trackappv2"
-    compileSdk = 37
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.example.trackappv2"
         minSdk = 29
-        targetSdk = 36
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
 
@@ -36,7 +38,7 @@ android {
 
     buildFeatures {
         compose = true
-        buildConfig = true  // ← adaugă asta
+        buildConfig = true
     }
 
     buildTypes {
@@ -52,9 +54,18 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+    kotlinOptions {
+        jvmTarget = "11"
+    }
 }
 
 dependencies {
+    // AndroidX & UI
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.appcompat)
+    implementation(libs.google.android.material)
+    
+    // Compose
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.animation)
@@ -65,9 +76,25 @@ dependencies {
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
-    implementation(libs.androidx.core.ktx)
+    
+    // Lifecycle
     implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation(libs.androidx.material3)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    
+    // Room
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
+    ksp(libs.room.compiler)
+
+    // HMS Kits
+    implementation("com.huawei.hms:maps:6.11.2.301")
+    implementation("com.huawei.hms:location:6.11.0.300")
+    implementation("com.huawei.hms:ucs-credential-developers:1.0.4.317")
+
+    // Utilities
+    implementation("com.google.code.gson:gson:2.14.0")
+
+    // Testing
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
@@ -75,18 +102,4 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
-
-    implementation("androidx.core:core-ktx:1.19.0")
-    implementation("androidx.appcompat:appcompat:1.7.1")
-    implementation("com.google.android.material:material:1.14.0")
-
-    // HMS Kits
-    implementation("com.huawei.hms:maps:6.11.2.301")
-    implementation("com.huawei.hms:location:6.11.0.300")
-    // Force a resolvable version of ucs-credential-developers
-    implementation("com.huawei.hms:ucs-credential-developers:1.0.4.317")
-
-    // JSON Serialization
-    implementation("com.google.code.gson:gson:2.14.0")
 }

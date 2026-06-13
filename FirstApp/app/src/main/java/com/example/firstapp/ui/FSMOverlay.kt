@@ -8,7 +8,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
@@ -19,17 +18,21 @@ import com.example.firstapp.AppViewModel
 import com.example.firstapp.creation.CreationState
 import com.example.firstapp.cruise.CruiseState
 import com.example.firstapp.data.Track
+import com.example.firstapp.managers.TelemetryManager
 import com.example.firstapp.history.SavedTracksState
+import com.example.firstapp.map.MapController
+import com.example.firstapp.map.TrackMarkersOverlay
 import com.example.firstapp.racing.RacingState
 import com.example.firstapp.racing.TrackRacingState
 import com.example.firstapp.sensors.GSensorEffect
 import com.example.firstapp.ui.screens.*
 import com.huawei.hms.maps.HuaweiMap
 import com.huawei.hms.maps.model.LatLng
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.milliseconds
-import kotlin.time.Duration.Companion.seconds
 
 @Composable
 fun FSMOverlay(
@@ -37,6 +40,7 @@ fun FSMOverlay(
     state: AppState,
     speed: Int,
     latLng: LatLng?,
+    bearing: Float,
     huaweiMap: HuaweiMap?,
     selectedTrack: Track?,
     onStateChange: (AppState) -> Unit
@@ -177,16 +181,19 @@ fun FSMOverlay(
 
     // Update locație și viteză
     LaunchedEffect(speed, latLng) {
-        if (state == AppState.RACING && racingLogic.isRunning) {
-            racingLogic.update(speed, latLng)
-        }
-        if (state == AppState.TRACK_RACING) {
-            trackRacingLogic.value?.update(speed, latLng)
-        }
-        if (state == AppState.RACE_CREATION &&
-            creationLogic.isLiveRecording &&
-            latLng != null) {
-            creationLogic.updateLiveLocation(latLng)
+        // Asigurăm execuția pe Main Thread pentru apelurile HMS Native din TrackRacingState
+        withContext(Dispatchers.Main) {
+            if (state == AppState.RACING && racingLogic.isRunning) {
+                racingLogic.update(speed, latLng)
+            }
+            if (state == AppState.TRACK_RACING) {
+                trackRacingLogic.value?.update(speed, latLng)
+            }
+            if (state == AppState.RACE_CREATION &&
+                creationLogic.isLiveRecording &&
+                latLng != null) {
+                creationLogic.updateLiveLocation(latLng)
+            }
         }
     }
 
@@ -195,8 +202,30 @@ fun FSMOverlay(
         onDispose { cruiseLogic.onDestroy() }
     }
 
-    // UI
+    // UI — AICI includem elementele de hartă mutate din MainActivity pentru o mai bună coordonare
     Box(modifier = Modifier.fillMaxSize()) {
+
+        // 1. Cameră + player marker + stil hartă (Urmărește utilizatorul)
+        MapController(
+            huaweiMap  = huaweiMap,
+            latLng     = latLng,
+            bearing    = bearing,
+            speed      = speed,
+            appState   = state,
+            onCameraMoveStarted = { reason ->
+                // Notificăm CruiseState de interacțiunea cu harta
+                cruiseLogic.onCameraMoveStarted(reason)
+            }
+        )
+
+        // 2. Markerii de trasee (vizibili doar în Cruise)
+        TrackMarkersOverlay(
+            huaweiMap   = huaweiMap,
+            savedTracks = savedTracks,
+            appState    = state
+        )
+
+        // 3. Ecranele aplicației (HUD)
         AnimatedContent(
             targetState = state,
             transitionSpec = {

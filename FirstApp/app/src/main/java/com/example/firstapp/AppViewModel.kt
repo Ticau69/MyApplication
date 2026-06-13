@@ -10,15 +10,23 @@ import com.example.firstapp.data.LapData
 import com.example.firstapp.data.SplitData
 import com.example.firstapp.data.Track
 import com.example.firstapp.data.TrackRepository
+import com.example.firstapp.data.local.AppDatabase
+import com.example.firstapp.data.local.RaceHistoryEntity
+import com.example.firstapp.data.local.TrackEntity
 import com.example.firstapp.managers.*
 import com.example.firstapp.racing.HistoryManager
 import com.example.firstapp.racing.RaceRecord
 import com.example.firstapp.service.LocationForegroundService
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import com.huawei.hms.maps.model.LatLng
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -27,15 +35,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val trackRepository = TrackRepository(application)
     private val historyManager = HistoryManager(application)
 
+    private val database = AppDatabase.getDatabase(application)
+    private val trackDao = database.trackDao()
+    private val raceHistoryDao = database.raceHistoryDao()
+
     // --- 1. INSTANȚIEREA MANAGERILOR DEDICAȚI ---
     val settingsManager = SettingsManager(context)
     val proximityManager = ProximityManager(viewModelScope)
     val gpsMonitor = GpsMonitor(context, viewModelScope)
     val ghostManager = GhostManager(context, viewModelScope)
     val telemetryManager = TelemetryManager(context, viewModelScope, settingsManager)
-
-    // Păstrăm compatibilitatea de tip pentru TrackRacingState și FSMOverlay prin Typealias
-    typealias RaceFinishData = TelemetryManager.RaceFinishData
 
     // --- 2. DELEGAREA STĂRILOR CĂTRE MANAGERI (Zero impact pe UI) ---
     val isTtsEnabled = settingsManager.isTtsEnabled
@@ -88,7 +97,67 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     // --- Saved Tracks ---
     private val _savedTracks = MutableStateFlow<List<Track>>(emptyList())
-    val savedTracks = _savedTracks.asStateFlow()
+    val savedTracks: StateFlow<List<Track>> = _savedTracks.asStateFlow()
+    val gson = Gson()
+    // Funcție suspendabilă (non-blocking) pentru salvarea unui traseu nou creat
+    fun saveNewTrack(name: String, isCircuit: Boolean, startPoint: LatLng) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val newTrack = TrackEntity(name = name, isCircuit = isCircuit, startLatLng = startPoint)
+            trackDao.insertTrack(newTrack)
+        }
+    }
+
+    fun createAndSaveTrack(trackName: String, isCircuitMode: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            // Preluăm locația curentă ca punct de start
+            val startLocation = currentLatLng.value ?: return@launch
+
+            val newTrack = TrackEntity(
+                name = trackName,
+                isCircuit = isCircuitMode,
+                startLatLng = startLocation
+            )
+
+            // Salvăm în baza de date
+            trackDao.insertTrack(newTrack)
+
+            // Trecem înapoi în modul Cruise după salvare
+            withContext(Dispatchers.Main) {
+                transitionTo(AppState.CRUISE)
+            }
+        }
+    }
+
+    // Transformă lista [12000, 15000] în textul "12000,15000"
+    fun serializeLaps(laps: List<LapData>): String {
+        return gson.toJson(laps)
+    }
+
+    // Transformă textul "12000,15000" înapoi în lista [12000, 15000]
+    fun deserializeLaps(lapsString: String): List<LapData> {
+        if (lapsString.isBlank()) return emptyList()
+
+        val type = object : TypeToken<List<LapData>>() {}.type
+        return gson.fromJson(lapsString, type)
+    }
+
+    fun saveRaceSessionToDatabase(trackId: Long, durationMs: Long, maxSpeed: Int, avgSpeed: Int) {
+        viewModelScope.launch(Dispatchers.IO) {
+            // Preluăm lista de tururi din StateFlow-ul curent
+            val currentLaps = allLaps.value
+            val lapsJsonString = serializeLaps(currentLaps)
+
+            val raceRecord = RaceHistoryEntity(
+                trackId = trackId,
+                durationMs = durationMs,
+                maxSpeedKmh = maxSpeed,
+                avgSpeedKmh = avgSpeed,
+                lapTimesJson = lapsJsonString
+            )
+
+            raceHistoryDao.insertRaceRecord(raceRecord)
+        }
+    }
 
     // --- Race History ---
     private val _raceHistory = MutableStateFlow<List<RaceRecord>>(emptyList())

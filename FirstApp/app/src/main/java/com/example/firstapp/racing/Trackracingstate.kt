@@ -17,6 +17,7 @@ import com.example.firstapp.data.RunData
 import com.example.firstapp.data.SerializableLatLng
 import com.example.firstapp.data.SplitData
 import com.example.firstapp.data.Track
+import com.example.firstapp.managers.TelemetryManager
 import com.example.trackappv2.R
 import com.huawei.hms.maps.HuaweiMap
 import com.huawei.hms.maps.model.BitmapDescriptorFactory
@@ -27,6 +28,8 @@ import com.huawei.hms.maps.model.MarkerOptions
 import com.huawei.hms.maps.model.Polyline
 import com.huawei.hms.maps.model.PolylineOptions
 import com.huawei.hms.maps.model.RoundCap
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.Locale
 
 class TrackRacingState(
@@ -36,7 +39,7 @@ class TrackRacingState(
     private val huaweiMap: HuaweiMap,
     private val bestRun: RunData? = null,
     private val ghostRun: GhostRun? = null,  // ← adaugă
-    private val onRaceFinished: (AppViewModel.RaceFinishData) -> Unit,
+    private val onRaceFinished: (TelemetryManager.RaceFinishData) -> Unit,
     private val onSplitRecorded: (SplitData) -> Unit,
     private val onLapCompleted: (LapData) -> Unit,
     private val onGhostDeltaUpdated: (Long) -> Unit = {}  // ← delta în ms
@@ -86,6 +89,10 @@ class TrackRacingState(
     private var ghostPolyline: com.huawei.hms.maps.model.Polyline? = null
 
     init {
+        // Lansăm inițializarea hărții pe Main Thread pentru a evita SIGSEGV
+        // Deoarece suntem într-un constructor, nu putem face suspend direct, 
+        // dar FSMOverlay garantează că suntem pe Main (Composition) sau îl gestionăm în update.
+        // Totuși, drawSavedTrack() face apeluri native HMS, deci trebuie să fie Main.
         drawSavedTrack()
         if (ghostRun != null) setupGhostMarker()
     }
@@ -222,7 +229,10 @@ class TrackRacingState(
 
             gpsTrailPoints.add(pos)
             if (gpsTrailPoints.size > 500) gpsTrailPoints.removeAt(0)
+            
+            // HMS Native call — asigurați-vă că proprietatea 'points' e setată pe Main Thread
             gpsTrailPolyline?.points = gpsTrailPoints.toList()
+
             checkCheckpointProximity(pos)
         }
     }
@@ -312,7 +322,7 @@ class TrackRacingState(
         val runData = session.buildRunData(1)
         saveRaceRecord()
         onRaceFinished(
-            AppViewModel.RaceFinishData(
+            TelemetryManager.RaceFinishData(
                 durationSeconds = session.currentTimeMs / 1000,
                 maxSpeed = session.currentMaxSpeed,
                 distanceKm = session.getTotalDistanceKm(),

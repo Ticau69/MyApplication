@@ -60,19 +60,6 @@ class CruiseState(
             val tracks = kotlinx.coroutines.withContext(Dispatchers.IO) {
                 TrackRepository(context).getTracks()
             }
-
-            val descriptor = bitmapDescriptorFromVector(context, R.drawable.ic_saved_track)
-
-            tracks.forEach { track ->
-                val startLatLng = track.start.toLatLng()
-                val marker = map.addMarker(
-                    MarkerOptions()
-                        .position(startLatLng)
-                        .icon(descriptor)
-                        .anchorMarker(0.5f, 1f)
-                )
-                trackMarkers[marker] = track
-            }
         }
     }
 
@@ -93,13 +80,6 @@ class CruiseState(
             exitFocusMode()
         }
 
-        // Monitorizăm mișcările hărții
-        map.setOnCameraMoveStartedListener { reason ->
-            if (reason == HuaweiMap.OnCameraMoveStartedListener.REASON_GESTURE && focusedTrack != null) {
-                resetFocusTimer()
-            }
-        }
-
         // Când camera se oprește din mișcare, verificăm distanța
         map.setOnCameraIdleListener {
             focusedTrack?.let { track ->
@@ -110,6 +90,12 @@ class CruiseState(
                     exitFocusMode()
                 }
             }
+        }
+    }
+
+    fun onCameraMoveStarted(reason: Int) {
+        if (reason == HuaweiMap.OnCameraMoveStartedListener.REASON_GESTURE && focusedTrack != null) {
+            resetFocusTimer()
         }
     }
 

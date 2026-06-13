@@ -1,5 +1,6 @@
 package com.example.firstapp.ui.components
 
+import android.app.Activity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,6 +12,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -19,9 +21,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.example.trackappv2.R
 
 @Composable
@@ -33,9 +40,20 @@ fun CruiseHUD(
     onQuickRaceClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Stări pentru ambele meniuri (Stânga și Dreapta)
+    val context = LocalContext.current
     var mainMenuExpanded by remember { mutableStateOf(false) }
     var settingsExpanded by remember { mutableStateOf(false) }
+
+    // Helper pentru a ascunde status bar-ul
+    fun hideSystemBars() {
+        val window = (context as? Activity)?.window ?: return
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
+        window.navigationBarColor = android.graphics.Color.TRANSPARENT
+        val controller = WindowCompat.getInsetsController(window, window.decorView)
+        controller.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        controller.hide(WindowInsetsCompat.Type.systemBars())
+    }
 
     Box(
         modifier = modifier
@@ -43,11 +61,12 @@ fun CruiseHUD(
             .padding(16.dp)
             .padding(top = 24.dp)
     ) {
-        // ========================================================
-        // --- COLȚUL STÂNGA-SUS: Meniul Principal (Sandwich) ---
-        // ========================================================
+        // ── STÂNGA-SUS: Meniul Principal ─────────────────────────
         Box(modifier = Modifier.align(Alignment.TopStart)) {
-            IconButton(onClick = { mainMenuExpanded = true }) {
+            IconButton(onClick = {
+                mainMenuExpanded = true
+                hideSystemBars()
+            }) {
                 Icon(
                     painter = painterResource(id = R.drawable.ic_menu),
                     contentDescription = "Meniu",
@@ -57,41 +76,40 @@ fun CruiseHUD(
 
             DropdownMenu(
                 expanded = mainMenuExpanded,
-                onDismissRequest = { mainMenuExpanded = false },
+                onDismissRequest = {
+                    mainMenuExpanded = false
+                    hideSystemBars()
+                },
                 modifier = Modifier.background(MaterialTheme.colorScheme.surfaceContainer)
             ) {
-                DropdownMenuItem(
-                    text = { Text("ÎNCHIDE", color = com.example.firstapp.ui.theme.BrakeRed, fontWeight = FontWeight.Bold) },
-                    trailingIcon = {
-                        Icon(painter = painterResource(id = R.drawable.ic_close), contentDescription = null, tint = com.example.firstapp.ui.theme.BrakeRed)
-                    },
-                    onClick = { mainMenuExpanded = false }
-                )
-                HorizontalDivider(color = com.example.firstapp.ui.theme.OutlineVariant)
                 DropdownMenuItem(
                     text = { Text("Trasee Salvate", color = MaterialTheme.colorScheme.onSurface) },
                     onClick = {
                         mainMenuExpanded = false
+                        hideSystemBars()
                         onSavedTracksClick()
                     }
                 )
+                HorizontalDivider(color = com.example.firstapp.ui.theme.OutlineVariant)
                 DropdownMenuItem(
                     text = { Text("Istoric Curse", color = MaterialTheme.colorScheme.onSurface) },
                     onClick = {
                         mainMenuExpanded = false
+                        hideSystemBars()
                         onHistoryClick()
                     }
                 )
             }
         }
 
-        // ========================================================
-        // --- COLȚUL DREAPTA-SUS: Meniul de Setări (Gear) ---
-        // ========================================================
+        // ── DREAPTA-SUS: Meniul Setări ───────────────────────────
         Box(modifier = Modifier.align(Alignment.TopEnd)) {
-            IconButton(onClick = { settingsExpanded = true }) {
+            IconButton(onClick = {
+                settingsExpanded = true
+                hideSystemBars()
+            }) {
                 Icon(
-                    painter = painterResource(id = R.drawable.ic_settings), // Iconița nouă
+                    painter = painterResource(id = R.drawable.ic_settings),
                     contentDescription = "Setări",
                     tint = Color.White
                 )
@@ -99,45 +117,59 @@ fun CruiseHUD(
 
             DropdownMenu(
                 expanded = settingsExpanded,
-                onDismissRequest = { settingsExpanded = false },
+                onDismissRequest = {
+                    settingsExpanded = false
+                    hideSystemBars()
+                },
                 modifier = Modifier.background(MaterialTheme.colorScheme.surfaceContainer)
             ) {
-                DropdownMenuItem(
-                    text = { Text("ÎNCHIDE", color = com.example.firstapp.ui.theme.BrakeRed, fontWeight = FontWeight.Bold) },
-                    trailingIcon = {
-                        Icon(painter = painterResource(id = R.drawable.ic_close), contentDescription = null, tint = com.example.firstapp.ui.theme.BrakeRed)
-                    },
-                    onClick = { settingsExpanded = false }
-                )
-                HorizontalDivider(color = com.example.firstapp.ui.theme.OutlineVariant)
-
-                // Opțiunea ta de creare traseu s-a mutat aici!
                 DropdownMenuItem(
                     text = { Text("Creare Traseu Nou", color = MaterialTheme.colorScheme.onSurface) },
                     onClick = {
                         settingsExpanded = false
+                        hideSystemBars()
                         onCreateTrackClick()
                     }
                 )
+                HorizontalDivider(color = com.example.firstapp.ui.theme.OutlineVariant)
                 DropdownMenuItem(
                     text = { Text("Setări Aplicație", color = MaterialTheme.colorScheme.onSurface) },
                     onClick = {
                         settingsExpanded = false
+                        hideSystemBars()
                         onSettingsClick()
                     }
                 )
             }
         }
 
-        // ========================================================
-        // --- JOS-CENTRU: Quick Race ---
-        // ========================================================
+        // ── JOS-CENTRU: Quick Race ───────────────────────────────
         VelocityPrimaryButton(
             text = "QUICK RACE",
             onClick = onQuickRaceClick,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 32.dp)
+        )
+    }
+}
+
+@Preview(
+    showBackground = true,
+    backgroundColor = 0xFF121212, // Un fundal închis pentru a simula harta de noapte
+    name = "Cruise HUD Preview"
+)
+@Composable
+fun CruiseHUDPreview() {
+    // Îmbrăcăm previzualizarea într-o temă întunecată (Dark Theme)
+    MaterialTheme(colorScheme = darkColorScheme()) {
+        CruiseHUD(
+            onSavedTracksClick = { /* Acțiune simulată */ },
+            onHistoryClick = { /* Acțiune simulată */ },
+            onSettingsClick = { /* Acțiune simulată */ },
+            onCreateTrackClick = { /* Acțiune simulată */ },
+            onQuickRaceClick = { /* Acțiune simulată */ },
+            modifier = Modifier.fillMaxSize()
         )
     }
 }
