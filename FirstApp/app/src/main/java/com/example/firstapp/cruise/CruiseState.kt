@@ -58,7 +58,8 @@ class CruiseState(
         scope.launch {
             // Executăm citirea din fișiere pe thread-ul IO
             val tracks = kotlinx.coroutines.withContext(Dispatchers.IO) {
-                TrackRepository(context).getTracks()
+                val dao = com.example.firstapp.data.local.AppDatabase.getDatabase(context).trackDao()
+                TrackRepository(dao).getTracks()
             }
         }
     }

@@ -1,58 +1,26 @@
 package com.example.firstapp.data
 
-import android.content.Context
-import androidx.core.content.edit
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
-import com.huawei.hms.maps.model.LatLng
+import android.app.Application
+import com.example.firstapp.data.local.TrackDao
+import com.example.firstapp.data.local.TrackEntity
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 
-class TrackRepository(context: Context) {
-    private val prefs = context.getSharedPreferences("saved_tracks", Context.MODE_PRIVATE)
-    private val gson = Gson()
+class TrackRepository(private val trackDao: TrackDao) {
 
-    fun saveTrack(
-        draft: TrackDraft,
-        name: String,
-        routedPoints: List<LatLng> = emptyList()
-    ): Boolean {
-        if (!draft.isValid) return false
+    // Flow reactiv — UI se actualizează automat la orice schimbare
+    val tracksFlow: Flow<List<Track>> = trackDao.getAllTracksFlow()
+        .map { entities -> entities.map { it.toTrack() } }
 
-        val track = Track(
-            id = java.util.UUID.randomUUID().toString(),
-            name = name,
-            raceType = draft.raceType,
-            createdAt = java.text.SimpleDateFormat(
-                "yyyy-MM-dd HH:mm",
-                java.util.Locale.getDefault()
-            ).format(java.util.Date()),
-            start = SerializableLatLng.from(draft.start!!),
-            checkpoints = draft.checkpoints.map { SerializableLatLng.from(it) },
-            finish = SerializableLatLng.from(draft.finish!!),
-            routedPoints = routedPoints.map { SerializableLatLng(it.latitude, it.longitude) }
-        )
+    suspend fun getTracks(): List<Track> =
+        trackDao.getAllTracks().map { it.toTrack() }
 
-        val tracks = getTracks().toMutableList()
-        tracks.add(0, track)
-        prefs.edit { putString("tracks_list", gson.toJson(tracks)) }
-        return true
-    }
+    suspend fun getTrackById(id: String): Track? =
+        trackDao.getTrackById(id)?.toTrack()
 
-    fun getTracks(): List<Track> {
-        val json = prefs.getString("tracks_list", null) ?: return emptyList()
-        val type = object : TypeToken<List<Track>>() {}.type
-        return gson.fromJson(json, type)
-    }
+    suspend fun saveTrack(track: Track) =
+        trackDao.insertTrack(TrackEntity.fromTrack(track))
 
-    fun deleteTrack(id: String): Boolean {
-        val currentTracks = getTracks()
-        // Filtrăm lista păstrând doar traseele care NU au ID-ul pe care vrem să-l ștergem
-        val filteredTracks = currentTracks.filter { it.id != id }
-
-        // Dacă dimensiunea listei e la fel, înseamnă că nu s-a găsit ID-ul
-        if (currentTracks.size == filteredTracks.size) return false
-
-        // Salvăm noua listă (fără traseul șters) înapoi în SharedPreferences
-        prefs.edit().putString("tracks_list", gson.toJson(filteredTracks)).apply()
-        return true
-    }
+    suspend fun deleteTrack(id: String) =
+        trackDao.deleteTrackById(id)
 }

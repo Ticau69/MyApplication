@@ -70,7 +70,7 @@ fun FSMOverlay(
     val cruiseLogic = remember { CruiseState(context, onStateChange) }
     val creationLogic = remember { CreationState(context, onStateChange, scope) }
     val savedTracksLogic = remember { SavedTracksState(context, huaweiMap) }
-    val racingLogic = remember { RacingState(context, onStateChange) }
+    val racingLogic = remember { RacingState(context, onStateChange, scope) }
     val trackRacingLogic = remember(selectedTrack) { mutableStateOf<TrackRacingState?>(null) }
 
     // G-Sensor — activ doar în cursă
@@ -114,6 +114,7 @@ fun FSMOverlay(
             onStateChange = onStateChange,
             track = selectedTrack,
             huaweiMap = huaweiMap,
+            scope = scope,
             ghostRun = currentGhostRun,
             onRaceFinished = { data ->
                 trackRacingLogic.value?.let { logic ->

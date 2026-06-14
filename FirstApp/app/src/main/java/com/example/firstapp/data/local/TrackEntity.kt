@@ -2,13 +2,44 @@ package com.example.firstapp.data.local
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
-import com.huawei.hms.maps.model.LatLng
+import com.example.firstapp.data.RaceType
+import com.example.firstapp.data.SerializableLatLng
+import com.example.firstapp.data.Track
 
 @Entity(tableName = "tracks")
 data class TrackEntity(
-    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    @PrimaryKey val id: String,                          // UUID String, ca în Track.kt
     val name: String,
-    val isCircuit: Boolean, // Diferențierea pe care am făcut-o pentru iconițe (Sprint vs Circuit)
-    val startLatLng: LatLng, // Coordonata de start unde punem markerul pin
-    val createdAt: Long = System.currentTimeMillis()
-)
+    val createdAt: String,
+    val start: SerializableLatLng,
+    val checkpoints: List<SerializableLatLng>,
+    val finish: SerializableLatLng,
+    val routedPoints: List<SerializableLatLng>,
+    val raceType: RaceType
+) {
+    // Conversie Entity → Model
+    fun toTrack(): Track = Track(
+        id           = id,
+        name         = name,
+        createdAt    = createdAt,
+        start        = start,
+        checkpoints  = checkpoints,
+        finish       = finish,
+        routedPoints = routedPoints,
+        raceType     = raceType
+    )
+
+    companion object {
+        // Conversie Model → Entity
+        fun fromTrack(track: Track): TrackEntity = TrackEntity(
+            id           = track.id,
+            name         = track.name,
+            createdAt    = track.createdAt,
+            start        = track.start,
+            checkpoints  = track.checkpoints,
+            finish       = track.finish,
+            routedPoints = track.routedPoints,
+            raceType     = track.raceType
+        )
+    }
+}

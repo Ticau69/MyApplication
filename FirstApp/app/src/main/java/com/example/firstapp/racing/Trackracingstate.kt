@@ -3,12 +3,10 @@ package com.example.firstapp.racing
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.Color
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.toColorInt
 import com.example.firstapp.AppState
-import com.example.firstapp.AppViewModel
 import com.example.firstapp.data.GhostFrame
 import com.example.firstapp.data.GhostRun
 import com.example.firstapp.data.LapData
@@ -17,6 +15,8 @@ import com.example.firstapp.data.RunData
 import com.example.firstapp.data.SerializableLatLng
 import com.example.firstapp.data.SplitData
 import com.example.firstapp.data.Track
+import com.example.firstapp.data.local.AppDatabase
+import com.example.firstapp.managers.HistoryManager
 import com.example.firstapp.managers.TelemetryManager
 import com.example.trackappv2.R
 import com.huawei.hms.maps.HuaweiMap
@@ -28,8 +28,8 @@ import com.huawei.hms.maps.model.MarkerOptions
 import com.huawei.hms.maps.model.Polyline
 import com.huawei.hms.maps.model.PolylineOptions
 import com.huawei.hms.maps.model.RoundCap
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import java.util.Locale
 
 class TrackRacingState(
@@ -37,6 +37,7 @@ class TrackRacingState(
     private val onStateChange: (AppState) -> Unit,
     private val track: Track,
     private val huaweiMap: HuaweiMap,
+    private val scope: CoroutineScope,
     private val bestRun: RunData? = null,
     private val ghostRun: GhostRun? = null,  // ← adaugă
     private val onRaceFinished: (TelemetryManager.RaceFinishData) -> Unit,
@@ -340,7 +341,8 @@ class TrackRacingState(
     }
 
     private fun saveRaceRecord() {
-        val manager = HistoryManager(context)
+        val dao = AppDatabase.getDatabase(context).raceHistoryDao()
+        val manager = HistoryManager(dao)
         val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
         val record = RaceRecord(
             id = java.util.UUID.randomUUID().toString(),
@@ -349,7 +351,9 @@ class TrackRacingState(
             distanceKm = session.getTotalDistanceKm(),
             durationSeconds = session.currentTimeMs / 1000
         )
-        manager.saveRace(record)
+        scope.launch {
+            manager.saveRace(record)
+        }
     }
 
     fun cleanup() {

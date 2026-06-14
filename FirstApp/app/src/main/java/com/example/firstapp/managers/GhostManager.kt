@@ -12,11 +12,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class GhostManager(
-    context: Context,
+    private val ghostRepository: GhostRepository,  // ← înlocuiește Context
     private val scope: CoroutineScope
 ) {
-    private val ghostRepository = GhostRepository(context)
-
     // Starea pentru diferența de timp față de fantomă
     private val _ghostDeltaMs = MutableStateFlow<Long?>(null)
     val ghostDeltaMs = _ghostDeltaMs.asStateFlow()
@@ -34,9 +32,10 @@ class GhostManager(
                 ghostRepository.getBestRun(trackId)
             }
             _currentGhostRun.value = ghost
-            _ghostDeltaMs.value = null // Resetăm delta la schimbarea traseului
+            _ghostDeltaMs.value = null
         }
     }
+
 
     /**
      * Actualizează UI-ul cu avansul/întârzierea ta față de fantomă.
@@ -53,10 +52,10 @@ class GhostManager(
             withContext(Dispatchers.IO) {
                 ghostRepository.saveBestRun(
                     GhostRun(
-                        trackId = trackId,
-                        lapNumber = 1,
+                        trackId     = trackId,
+                        lapNumber   = 1,
                         totalTimeMs = totalTimeMs,
-                        frames = frames
+                        frames      = frames
                     )
                 )
             }

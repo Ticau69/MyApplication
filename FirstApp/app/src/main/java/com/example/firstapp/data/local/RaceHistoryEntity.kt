@@ -2,14 +2,40 @@ package com.example.firstapp.data.local
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import com.example.firstapp.data.LapData
+import com.example.firstapp.racing.RaceRecord
 
 @Entity(tableName = "race_history")
 data class RaceHistoryEntity(
-    @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val trackId: Long, // Legătura cu traseul pe care s-a alergat
-    val date: Long = System.currentTimeMillis(),
-    val durationMs: Long,
-    val maxSpeedKmh: Int,
-    val avgSpeedKmh: Int,
-    val lapTimesJson: String // Salvăm lista de timpi pe tur (allLaps) ca text structurat JSON
-)
+    @PrimaryKey val id: String,                  // UUID String, ca în RaceRecord
+    val trackId: String?,                        // null pentru Quick Race fără traseu
+    val date: String,
+    val maxSpeed: Int,
+    val distanceKm: Double,
+    val durationSeconds: Long,
+    val laps: List<LapData>                      // Convertit prin Converters
+) {
+    fun toRaceRecord(): RaceRecord = RaceRecord(
+        id              = id,
+        date            = date,
+        maxSpeed        = maxSpeed,
+        distanceKm      = distanceKm,
+        durationSeconds = durationSeconds
+    )
+
+    companion object {
+        fun fromRaceRecord(
+            record: RaceRecord,
+            trackId: String? = null,
+            laps: List<LapData> = emptyList()
+        ): RaceHistoryEntity = RaceHistoryEntity(
+            id              = record.id,
+            trackId         = trackId,
+            date            = record.date,
+            maxSpeed        = record.maxSpeed,
+            distanceKm      = record.distanceKm,
+            durationSeconds = record.durationSeconds,
+            laps            = laps
+        )
+    }
+}

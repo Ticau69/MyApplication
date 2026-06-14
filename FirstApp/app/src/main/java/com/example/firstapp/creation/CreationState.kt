@@ -13,6 +13,8 @@ import androidx.core.graphics.createBitmap
 import com.example.firstapp.AppState
 import com.example.firstapp.data.RaceType // NOU: Asigură-te că ai acest import
 import com.example.firstapp.data.TrackDraft
+import com.example.firstapp.data.Track
+import com.example.firstapp.data.SerializableLatLng
 import com.example.firstapp.data.TrackRepository
 import com.example.firstapp.data.Waypoint
 import com.example.firstapp.data.WaypointType
@@ -290,8 +292,23 @@ class CreationState(
                     trackDraft.finish = trackDraft.start
                 }
 
-                val repo = TrackRepository(context)
-                repo.saveTrack(trackDraft, name, lastRoutedPoints)
+                if (trackDraft.isValid) {
+                    val track = Track(
+                        id = java.util.UUID.randomUUID().toString(),
+                        name = name,
+                        createdAt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date()),
+                        start = SerializableLatLng.from(trackDraft.start!!),
+                        checkpoints = trackDraft.checkpoints.map { SerializableLatLng.from(it) },
+                        finish = SerializableLatLng.from(trackDraft.finish!!),
+                        routedPoints = lastRoutedPoints.map { SerializableLatLng.from(it) },
+                        raceType = trackDraft.raceType
+                    )
+                    val dao = com.example.firstapp.data.local.AppDatabase.getDatabase(context).trackDao()
+                    val repo = TrackRepository(dao)
+                    scope.launch {
+                        repo.saveTrack(track)
+                    }
+                }
                 cleanup()
                 onStateChange(AppState.CRUISE)
             }

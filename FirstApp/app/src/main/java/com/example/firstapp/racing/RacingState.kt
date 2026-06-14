@@ -3,10 +3,15 @@ package com.example.firstapp.racing
 import android.content.Context
 import com.example.firstapp.AppState
 import com.example.firstapp.data.RaceType
+import com.example.firstapp.data.local.AppDatabase
+import com.example.firstapp.managers.HistoryManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 
 class RacingState(
     private val context: Context,
-    private val onStateChange: (AppState) -> Unit
+    private val onStateChange: (AppState) -> Unit,
+    private val scope: CoroutineScope
 ) {
     val session = RaceSession(RaceType.SPRINT)
     private var isInitialized = false
@@ -36,7 +41,8 @@ class RacingState(
         get() = isInitialized
 
     private fun saveRaceRecord() {
-        val manager = HistoryManager(context)
+        val dao = AppDatabase.getDatabase(context).raceHistoryDao()
+        val manager = HistoryManager(dao)
         val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
         val record = RaceRecord(
             id = java.util.UUID.randomUUID().toString(),
@@ -45,6 +51,8 @@ class RacingState(
             distanceKm = session.getTotalDistanceKm(),
             durationSeconds = session.currentTimeMs / 1000
         )
-        manager.saveRace(record)
+        scope.launch {
+            manager.saveRace(record)
+        }
     }
 }

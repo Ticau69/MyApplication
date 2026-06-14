@@ -6,12 +6,21 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 
-@Database(entities = [TrackEntity::class, RaceHistoryEntity::class], version = 1, exportSchema = false)
+@Database(
+    entities = [
+        TrackEntity::class,
+        RaceHistoryEntity::class,
+        GhostRunEntity::class
+    ],
+    version = 2,                        // ← incrementat față de versiunea 1
+    exportSchema = false
+)
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun trackDao(): TrackDao
     abstract fun raceHistoryDao(): RaceHistoryDao
+    abstract fun ghostRunDao(): GhostRunDao
 
     companion object {
         @Volatile
@@ -24,7 +33,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "race_tracker_db"
                 )
-                    .fallbackToDestructiveMigration() // Șterge baza veche dacă schimbi structura la teste
+                    .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance
                 instance
