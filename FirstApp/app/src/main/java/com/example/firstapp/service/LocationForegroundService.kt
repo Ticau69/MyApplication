@@ -34,7 +34,8 @@ class LocationForegroundService : Service() {
                 val data = LocationData(
                     latLng = LatLng(location.latitude, location.longitude),
                     speed = (location.speed * 3.6).toInt(),
-                    bearing = location.bearing
+                    bearing = location.bearing,
+                    rawLocation = location
                 )
                 // Emitem locația în flow-ul shared din LocationTracker
                 LocationTracker.sharedLocationFlow.tryEmit(data)

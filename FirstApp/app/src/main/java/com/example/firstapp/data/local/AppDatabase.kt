@@ -10,9 +10,10 @@ import androidx.room.TypeConverters
     entities = [
         TrackEntity::class,
         RaceHistoryEntity::class,
-        GhostRunEntity::class
+        GhostRunEntity::class,
+        PaceNoteEntity::class   // ← adaugă
     ],
-    version = 2,                        // ← incrementat față de versiunea 1
+    version = 3,                // ← incrementat
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -21,6 +22,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun trackDao(): TrackDao
     abstract fun raceHistoryDao(): RaceHistoryDao
     abstract fun ghostRunDao(): GhostRunDao
+    abstract fun paceNoteDao(): PaceNoteDao
 
     companion object {
         @Volatile

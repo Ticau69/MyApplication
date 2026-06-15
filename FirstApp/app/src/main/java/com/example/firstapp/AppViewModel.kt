@@ -71,6 +71,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     // ── Location ──────────────────────────────────────────────────
     private val _currentLatLng = MutableStateFlow<LatLng?>(null)
     val currentLatLng = _currentLatLng.asStateFlow()
+    private val _currentLocationData = MutableStateFlow<android.location.Location?>(null)
+    val currentLocationData = _currentLocationData.asStateFlow()
 
     private val _currentSpeed = MutableStateFlow(0)
     val currentSpeed = _currentSpeed.asStateFlow()
@@ -109,6 +111,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             LocationTracker.sharedLocationFlow.collect { data ->
                 _currentLatLng.value = data.latLng
+                _currentLocationData.value = data.rawLocation // <-- Actualizăm și locația brută!
                 _currentSpeed.value  = data.speed
 
                 if (_appState.value == AppState.CRUISE) {
@@ -187,8 +190,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val tracker = LocationTracker(context)
         tracker.getLastKnownLocation { data ->
             data?.let {
-                _currentLatLng.value  = it.latLng
-                _currentBearing.value = it.bearing
+                _currentLatLng.value = data.latLng
+                _currentLocationData.value = data.rawLocation // <-- Actualizăm și locația brută!
+                _currentSpeed.value  = data.speed
+
             }
         }
         context.startForegroundService(
@@ -278,5 +283,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         super.onCleared()
         gpsMonitor.stopMonitoring()
         telemetryManager.destroy()
+    }
+
+    private val _paceNotesForTrack = MutableStateFlow<List<com.example.firstapp.data.PaceNote>>(emptyList())
+    val paceNotesForTrack = _paceNotesForTrack.asStateFlow()
+
+    fun loadPaceNotesForTrack(trackId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val dao = database.paceNoteDao()
+            val notes = dao.getPaceNotesForTrack(trackId)
+                .map { it.toPaceNote() }
+            _paceNotesForTrack.value = notes
+        }
     }
 }

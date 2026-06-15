@@ -18,6 +18,7 @@ import com.example.firstapp.data.Track
 import com.example.firstapp.data.local.AppDatabase
 import com.example.firstapp.managers.HistoryManager
 import com.example.firstapp.managers.TelemetryManager
+import com.example.firstapp.map.PolineSmoother
 import com.example.trackappv2.R
 import com.huawei.hms.maps.HuaweiMap
 import com.huawei.hms.maps.model.BitmapDescriptorFactory
@@ -38,12 +39,13 @@ class TrackRacingState(
     private val track: Track,
     private val huaweiMap: HuaweiMap,
     private val scope: CoroutineScope,
+    private val paceNotes: List<com.example.firstapp.data.PaceNote> = emptyList(), // ← adaugă
     private val bestRun: RunData? = null,
-    private val ghostRun: GhostRun? = null,  // ← adaugă
+    private val ghostRun: GhostRun? = null,
     private val onRaceFinished: (TelemetryManager.RaceFinishData) -> Unit,
     private val onSplitRecorded: (SplitData) -> Unit,
     private val onLapCompleted: (LapData) -> Unit,
-    private val onGhostDeltaUpdated: (Long) -> Unit = {}  // ← delta în ms
+    private val onGhostDeltaUpdated: (Long) -> Unit = {}
 ) {
     val session = RaceSession(track.raceType)
     var hasRaceStarted = false
@@ -56,7 +58,7 @@ class TrackRacingState(
     private var trackPolyline: Polyline? = null
     private var gpsTrailPolyline: Polyline? = null
     private val gpsTrailPoints = mutableListOf<LatLng>()
-
+    private val paceNotePolylines = mutableListOf<Polyline>()
     private val drawnMarkers = mutableListOf<Marker>()
 
     // Checkpoint tracking
@@ -138,16 +140,24 @@ class TrackRacingState(
             }
         }
 
-        trackPolyline = huaweiMap.addPolyline(
-            PolylineOptions()
-                .addAll(points)
-                .color("#991976D2".toColorInt())
-                .width(10f)
-                .jointType(JointType.ROUND)
-                .startCap(RoundCap())
-                .endCap(RoundCap())
-        )
+        if (paceNotes.isNotEmpty()) {
+            // ── Mod Pace Notes — polilinii colorate per segment ───────
+            drawPaceNotePolylines()
+        } else {
+            // ── Fallback — polilinie simplă dacă nu există Pace Notes ─
+            val smoothedPoints = PolineSmoother.smooth(points)
+            huaweiMap.addPolyline(
+                PolylineOptions()
+                    .addAll(smoothedPoints)   // ← smoothedPoints în loc de points
+                    .color("#991976D2".toColorInt())
+                    .width(10f)
+                    .jointType(JointType.ROUND)
+                    .startCap(RoundCap())
+                    .endCap(RoundCap())
+            ).also { paceNotePolylines.add(it) }
+        }
 
+        // GPS Trail rămâne neschimbat
         gpsTrailPolyline = huaweiMap.addPolyline(
             PolylineOptions()
                 .color("#FFFF6B35".toColorInt())
@@ -157,6 +167,7 @@ class TrackRacingState(
                 .endCap(RoundCap())
         )
 
+        // Markeri Start / Finish / Checkpoints
         huaweiMap.addMarker(
             MarkerOptions()
                 .position(track.start.toLatLng())
@@ -181,6 +192,59 @@ class TrackRacingState(
             )?.let { drawnMarkers.add(it) }
         }
     }
+
+    // În drawPaceNotePolylines() — aplică smoothing per segment:
+    private fun drawPaceNotePolylines() {
+        paceNotes.forEach { note ->
+            val rawPoints = note.points.map { it.toLatLng() }
+            if (rawPoints.size < 2) return@forEach
+
+            // Netezim fiecare segment individual
+            // dpEpsilon mai mic pentru segmente scurte
+            val segmentPoints = if (rawPoints.size >= 3) {
+                PolineSmoother.smooth(
+                    points            = rawPoints,
+                    dpEpsilon         = 0.00003,
+                    chaikinIterations = 3          // Mai puțin pe segmente scurte
+                )
+            } else {
+                rawPoints
+            }
+
+            val color = note.type.color
+            val androidColor = android.graphics.Color.argb(
+                (color.alpha * 255).toInt(),
+                (color.red   * 255).toInt(),
+                (color.green * 255).toInt(),
+                (color.blue  * 255).toInt()
+            )
+
+            // Umbra
+            huaweiMap.addPolyline(
+                PolylineOptions()
+                    .addAll(segmentPoints)
+                    .color(android.graphics.Color.argb(120, 0, 0, 0))
+                    .width(14f)
+                    .jointType(JointType.ROUND)
+                    .startCap(RoundCap())
+                    .endCap(RoundCap())
+                    .zIndex(1f)
+            ).also { paceNotePolylines.add(it) }
+
+            // Linia colorată
+            huaweiMap.addPolyline(
+                PolylineOptions()
+                    .addAll(segmentPoints)
+                    .color(androidColor)
+                    .width(8f)
+                    .jointType(JointType.ROUND)
+                    .startCap(RoundCap())
+                    .endCap(RoundCap())
+                    .zIndex(2f)
+            ).also { paceNotePolylines.add(it) }
+        }
+    }
+
 
     fun update(speed: Int, latLng: LatLng?) {
         latLng?.let { pos ->
@@ -361,12 +425,12 @@ class TrackRacingState(
         ghostMarker = null
         ghostPolyline?.remove()
         ghostPolyline = null
-        trackPolyline?.remove()
+        paceNotePolylines.forEach { it.remove() }  // ← înlocuiește trackPolyline?.remove()
+        paceNotePolylines.clear()
         gpsTrailPolyline?.remove()
         drawnMarkers.forEach { it.remove() }
         drawnMarkers.clear()
         gpsTrailPoints.clear()
-        trackPolyline = null
         gpsTrailPolyline = null
     }
 

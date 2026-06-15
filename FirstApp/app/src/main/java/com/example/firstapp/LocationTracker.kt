@@ -15,7 +15,8 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 data class LocationData(
     val latLng: LatLng,
     val speed: Int,
-    val bearing: Float
+    val bearing: Float,
+    val rawLocation: android.location.Location
 )
 
 class LocationTracker(context: Context) {
@@ -44,7 +45,8 @@ class LocationTracker(context: Context) {
                             LocationData(
                                 latLng = LatLng(location.latitude, location.longitude),
                                 speed = 0,
-                                bearing = location.bearing
+                                bearing = location.bearing,
+                                rawLocation = location
                             )
                         )
                     } else {
@@ -76,7 +78,8 @@ class LocationTracker(context: Context) {
                         LocationData(
                             latLng = LatLng(location.latitude, location.longitude),
                             speed = 0,
-                            bearing = location.bearing
+                            bearing = location.bearing,
+                             rawLocation = location
                         )
                     )
                 }
@@ -103,7 +106,8 @@ class LocationTracker(context: Context) {
                     val initialData = LocationData(
                         latLng = LatLng(location.latitude, location.longitude),
                         speed = (location.speed * 3.6f).toInt(), // Conversie m/s în km/h dacă ai nevoie
-                        bearing = location.bearing
+                        bearing = location.bearing,
+                        rawLocation = location
                     )
                     onLocationUpdate(initialData) // Trimitem locația orientativă către hartă imediat!
                 }
@@ -126,7 +130,8 @@ class LocationTracker(context: Context) {
                         LocationData(
                             latLng = LatLng(location.latitude, location.longitude),
                             speed = (location.speed * 3.6).toInt(),
-                            bearing = location.bearing
+                            bearing = location.bearing,
+                            rawLocation = location
                         )
                     )
                 }

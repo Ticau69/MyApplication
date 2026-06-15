@@ -18,6 +18,8 @@ import com.example.firstapp.AppViewModel
 import com.example.firstapp.creation.CreationState
 import com.example.firstapp.cruise.CruiseState
 import com.example.firstapp.data.Track
+import com.example.firstapp.data.TrackRepository
+import com.example.firstapp.data.local.AppDatabase
 import com.example.firstapp.managers.TelemetryManager
 import com.example.firstapp.history.SavedTracksState
 import com.example.firstapp.map.MapController
@@ -49,6 +51,7 @@ fun FSMOverlay(
     val scope = rememberCoroutineScope()
 
     // State din ViewModel
+    val paceNotes by viewModel.paceNotesForTrack.collectAsState()
     val savedTracks by viewModel.savedTracks.collectAsState()
     val raceHistory by viewModel.raceHistory.collectAsState()
     val currentLapTimeMs by viewModel.currentLapTimeMs.collectAsState()
@@ -60,6 +63,7 @@ fun FSMOverlay(
     val currentGhostRun by viewModel.currentGhostRun.collectAsState()
     val nearbyTrack by viewModel.nearbyTrack.collectAsState()
     val distanceToNearbyTrack by viewModel.distanceToNearbyTrack.collectAsState()
+    val rawLocation by viewModel.currentLocationData.collectAsState()
 
     var hasRaceStarted by remember { mutableStateOf(false) }
 
@@ -68,7 +72,16 @@ fun FSMOverlay(
 
     // Logic classes
     val cruiseLogic = remember { CruiseState(context, onStateChange) }
-    val creationLogic = remember { CreationState(context, onStateChange, scope) }
+    val db = remember { AppDatabase.getDatabase(context) }
+    val creationLogic = remember {
+        CreationState(
+            context         = context,
+            onStateChange   = onStateChange,
+            scope           = scope,
+            trackRepository = TrackRepository(db.trackDao()),
+            paceNoteDao     = db.paceNoteDao()
+        )
+    }
     val savedTracksLogic = remember { SavedTracksState(context, huaweiMap) }
     val racingLogic = remember { RacingState(context, onStateChange, scope) }
     val trackRacingLogic = remember(selectedTrack) { mutableStateOf<TrackRacingState?>(null) }
@@ -97,44 +110,50 @@ fun FSMOverlay(
         }
     }
 
-    // Încarcă ghost când se selectează un traseu
+    // Încarcă ghost + pace notes
     LaunchedEffect(selectedTrack) {
-        selectedTrack?.let { viewModel.loadGhostForTrack(it.id) }
+        selectedTrack?.let {
+            viewModel.loadGhostForTrack(it.id)
+            viewModel.loadPaceNotesForTrack(it.id)
+        }
     }
 
-    // UN SINGUR LaunchedEffect pentru TrackRacingState — cu ghost inclus
-    LaunchedEffect(selectedTrack, huaweiMap, currentGhostRun) {
+// Creează TrackRacingState — SE RETRIGGHEREAZĂ când paceNotes sosesc din DB
+    LaunchedEffect(selectedTrack, huaweiMap, currentGhostRun, paceNotes) {
         if (selectedTrack == null || huaweiMap == null) return@LaunchedEffect
 
-        // Curățăm instanța veche dacă există
+        // Așteptăm Pace Notes dacă traseul are routedPoints
+        if (selectedTrack.routedPoints.isNotEmpty() && paceNotes.isEmpty()) {
+            return@LaunchedEffect
+        }
+
         trackRacingLogic.value?.cleanup()
 
         trackRacingLogic.value = TrackRacingState(
-            context = context,
+            context       = context,
             onStateChange = onStateChange,
-            track = selectedTrack,
-            huaweiMap = huaweiMap,
-            scope = scope,
-            ghostRun = currentGhostRun,
+            track         = selectedTrack,
+            huaweiMap     = huaweiMap,
+            scope         = scope,
+            paceNotes     = paceNotes,
+            ghostRun      = currentGhostRun,
             onRaceFinished = { data ->
                 trackRacingLogic.value?.let { logic ->
                     viewModel.saveGhostRun(
-                        trackId = selectedTrack.id,
-                        frames = logic.getCurrentGhostFrames(),
+                        trackId     = selectedTrack.id,
+                        frames      = logic.getCurrentGhostFrames(),
                         totalTimeMs = data.durationSeconds * 1000
                     )
                 }
                 viewModel.onRaceFinished(data)
             },
-            onSplitRecorded = { split -> viewModel.onSplitRecorded(split) },
-            onLapCompleted = { lap ->
+            onSplitRecorded     = { split -> viewModel.onSplitRecorded(split) },
+            onLapCompleted      = { lap ->
                 trackRacingLogic.value?.let { logic ->
                     viewModel.onLapCompleted(lap, logic.session.laps)
                 }
             },
-            onGhostDeltaUpdated = { delta ->
-                viewModel.onGhostDeltaUpdated(delta)
-            }
+            onGhostDeltaUpdated = { delta -> viewModel.onGhostDeltaUpdated(delta) }
         )
     }
 
@@ -180,7 +199,18 @@ fun FSMOverlay(
         }
     }
 
-    // Update locație și viteză
+    // Update locație (brută și procesată) și viteză
+    LaunchedEffect(rawLocation) {
+        if (state == AppState.RACE_CREATION) {
+            rawLocation?.let { loc ->
+                // Acum îi trimitem obiectul complet (Location), iar filtrul tău
+                // de acuratețe din CreationState va funcționa impecabil!
+                creationLogic.updateLiveLocation(loc)
+            }
+        }
+    }
+
+
     LaunchedEffect(speed, latLng) {
         // Asigurăm execuția pe Main Thread pentru apelurile HMS Native din TrackRacingState
         withContext(Dispatchers.Main) {
@@ -189,11 +219,6 @@ fun FSMOverlay(
             }
             if (state == AppState.TRACK_RACING) {
                 trackRacingLogic.value?.update(speed, latLng)
-            }
-            if (state == AppState.RACE_CREATION &&
-                creationLogic.isLiveRecording &&
-                latLng != null) {
-                creationLogic.updateLiveLocation(latLng)
             }
         }
     }

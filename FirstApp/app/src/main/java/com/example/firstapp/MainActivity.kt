@@ -9,6 +9,7 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -61,11 +62,7 @@ class MainActivity : ComponentActivity() {
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
-        // Status bar transparent
-        window.statusBarColor = android.graphics.Color.TRANSPARENT
-
-// Navigation bar transparent
-        window.navigationBarColor = android.graphics.Color.TRANSPARENT
+        enableEdgeToEdge()
 
         setContent {
             val shouldStartCruise = intent.getBooleanExtra("START_CRUISE_MODE", false)
