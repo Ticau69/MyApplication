@@ -3,10 +3,10 @@ package com.example.firstapp.history
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.Color
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.createBitmap
 import com.example.firstapp.data.Track
+import com.example.firstapp.map.MapVisualUtils
 import com.example.trackappv2.R
 import com.huawei.hms.maps.CameraUpdateFactory
 import com.huawei.hms.maps.HuaweiMap
@@ -15,10 +15,9 @@ import com.huawei.hms.maps.model.LatLngBounds
 import com.huawei.hms.maps.model.Marker
 import com.huawei.hms.maps.model.MarkerOptions
 import com.huawei.hms.maps.model.Polyline
-import com.huawei.hms.maps.model.PolylineOptions
 
 class SavedTracksState(
-    private val context: Context, // Nu mai folosim "view", ci doar contextul!
+    private val context: Context,
     private var huaweiMap: HuaweiMap? = null
 ) {
     var isMapSet = false
@@ -37,7 +36,7 @@ class SavedTracksState(
 
         clearDrawnObjects()
 
-        val points = if (track.routedPoints.isNotEmpty()) {
+        val rawPoints = if (track.routedPoints.isNotEmpty()) {
             track.routedPoints.map { it.toLatLng() }
         } else {
             buildList {
@@ -47,50 +46,34 @@ class SavedTracksState(
             }
         }
 
-        // Polyline (Poți schimba culoarea în Volt Blue mai târziu: Color.parseColor("#C2C1FF"))
-        drawnPolylines.add(
-            map.addPolyline(
-                PolylineOptions()
-                    .addAll(points)
-                    .color(Color.parseColor("#1976D2"))
-                    .width(12f)
-            )
-        )
+        // 1. Delegăm desenarea și netezirea către noul nostru Creier Vizual
+        MapVisualUtils.drawHeatmap(map, rawPoints, drawnPolylines)
 
-        drawnMarkers.add(
-            map.addMarker(
-                MarkerOptions()
-                    .position(track.start.toLatLng())
-                    .icon(bitmapFromVector(context, R.drawable.ic_start_marker))
-                    .anchorMarker(0.5f, 1f)
-                    .title(track.name)
-            )
-        )
-
-        drawnMarkers.add(
-            map.addMarker(
-                MarkerOptions()
-                    .position(track.finish.toLatLng())
-                    .icon(bitmapFromVector(context, R.drawable.ic_finish_marker))
-                    .anchorMarker(0.5f, 1f)
-            )
-        )
+        // 2. Desenăm Markerele (Start, Finish, Checkpoints)
+        addMarkerToMap(map, track.start.toLatLng(), R.drawable.ic_start_marker, track.name)
+        addMarkerToMap(map, track.finish.toLatLng(), R.drawable.ic_finish_marker)
 
         track.checkpoints.forEach { cp ->
-            drawnMarkers.add(
-                map.addMarker(
-                    MarkerOptions()
-                        .position(cp.toLatLng())
-                        .icon(bitmapFromVector(context, R.drawable.ic_checkpoint_marker))
-                        .anchorMarker(0.5f, 1f)
-                )
-            )
+            addMarkerToMap(map, cp.toLatLng(), R.drawable.ic_checkpoint_marker)
         }
 
-        val boundsBuilder = LatLngBounds.builder()
-        points.forEach { boundsBuilder.include(it) }
-        val bounds = boundsBuilder.build()
-        map.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, 100))
+        // 3. Centrarea Camerei
+        if (rawPoints.isNotEmpty()) {
+            val boundsBuilder = LatLngBounds.builder()
+            rawPoints.forEach { boundsBuilder.include(it) }
+            map.animateCamera(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), 100))
+        }
+    }
+
+    private fun addMarkerToMap(map: HuaweiMap, position: com.huawei.hms.maps.model.LatLng, iconRes: Int, title: String? = null) {
+        val marker = map.addMarker(
+            MarkerOptions()
+                .position(position)
+                .icon(bitmapFromVector(context, iconRes))
+                .anchorMarker(0.5f, 1f)
+                .apply { title?.let { title(it) } }
+        )
+        marker?.let { drawnMarkers.add(it) }
     }
 
     fun clearDrawnObjects() {

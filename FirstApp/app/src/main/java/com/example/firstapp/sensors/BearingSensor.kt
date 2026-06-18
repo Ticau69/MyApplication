@@ -5,45 +5,44 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
-import android.os.Build
 import android.view.Surface
 import android.view.WindowManager
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import com.example.firstapp.AppState
 
 @Composable
 fun BearingSensorEffect(
     appState: AppState,
+    currentSpeed: Int, // Parametru nou adăugat
     onBearingChanged: (Float) -> Unit
 ) {
     val context = LocalContext.current
+    var lastUpdateTime by remember { mutableLongStateOf(0L) }
 
-    // Recalculăm delay-ul când se schimbă starea
-    val sensorDelay = remember(appState) {
-        when (appState) {
-            AppState.CRUISE, AppState.RACING, AppState.TRACK_RACING ->
-                SensorManager.SENSOR_DELAY_UI      // ~60Hz
-            else ->
-                SensorManager.SENSOR_DELAY_NORMAL  // ~5Hz în meniuri
-        }
-    }
-
-    DisposableEffect(sensorDelay) { // ← depinde de delay, se recreează când se schimbă
+    DisposableEffect(Unit) { // Am scos sensorDelay-ul din key pentru a evita re-crearea excesivă
         val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
         val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
         val rotationSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
 
         val listener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent?) {
+                // 1. MAGIC FIX: Când ne mișcăm (> 5 km/h), GPS-ul preia direcția!
+                // Ignorăm complet busola hardware ca să evităm bug-urile de landscape din mașină.
+                if (currentSpeed >= 5) return
+
+                // 2. Limităm actualizările la maxim 10 ori pe secundă (100ms)
+                // Acest filtru oprește înghețarea completă a hărții
+                val currentTime = System.currentTimeMillis()
+                if (currentTime - lastUpdateTime < 100) return
+                lastUpdateTime = currentTime
+
                 if (event?.sensor?.type != Sensor.TYPE_ROTATION_VECTOR) return
 
                 val rotationMatrix = FloatArray(9)
                 SensorManager.getRotationMatrixFromVector(rotationMatrix, event.values)
 
-                val displayRotation = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val displayRotation = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
                     context.display?.rotation ?: Surface.ROTATION_0
                 } else {
                     @Suppress("DEPRECATION")
@@ -65,13 +64,15 @@ fun BearingSensorEffect(
                 val orientation = FloatArray(3)
                 SensorManager.getOrientation(remappedMatrix, orientation)
                 val bearing = ((Math.toDegrees(orientation[0].toDouble()).toFloat()) + 360) % 360
+
                 onBearingChanged(bearing)
             }
 
             override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
         }
 
-        sensorManager.registerListener(listener, rotationSensor, sensorDelay)
+        // Folosim SENSOR_DELAY_NORMAL (mai blând cu resursele)
+        sensorManager.registerListener(listener, rotationSensor, SensorManager.SENSOR_DELAY_NORMAL)
         onDispose { sensorManager.unregisterListener(listener) }
     }
 }

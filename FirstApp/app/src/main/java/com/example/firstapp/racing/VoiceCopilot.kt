@@ -9,59 +9,83 @@ class VoiceCopilot(context: Context) : TextToSpeech.OnInitListener {
     private var tts: TextToSpeech? = null
     private var isReady = false
 
+    // Legat de setările aplicației (din TelemetryManager)
+    var isEnabled = true
+
     init {
         tts = TextToSpeech(context, this)
     }
 
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
-            // Încercăm să setăm limba pe Română, altfel folosim limba sistemului
+            // Setăm co-pilotul în Limba Română
             val locale = Locale("ro", "RO")
             val result = tts?.setLanguage(locale)
 
-            if (result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED) {
-                isReady = true
+            // Fallback la engleză dacă pachetul RO nu este instalat pe telefon
+            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                tts?.setLanguage(Locale.US)
             } else {
-                tts?.setLanguage(Locale.getDefault())
                 isReady = true
             }
         }
     }
 
-    fun speakCheckpoint(checkpointName: String, deltaMs: Long?) {
-        if (!isReady) return
+    fun speak(text: String) {
+        if (!isEnabled || !isReady || text.isBlank()) return
 
-        val text = buildString {
-            append("$checkpointName. ")
+        // QUEUE_ADD adaugă mesajele la rând pentru a nu se întrerupe unul pe celălalt
+        tts?.speak(text, TextToSpeech.QUEUE_ADD, null, null)
+    }
 
-            if (deltaMs != null && deltaMs != 0L) {
-                val seconds = abs(deltaMs) / 1000.0
-                // Formatăm cu o singură zecimală (ex: 0.5)
-                val formattedSeconds = String.format(Locale.getDefault(), "%.1f", seconds)
+    // ── NOU: Funcții inteligente pentru TelemetryManager ──
 
-                if (deltaMs < 0) {
-                    append("Minus $formattedSeconds secunde.")
-                } else {
-                    append("Plus $formattedSeconds secunde.")
-                }
-            } else if (deltaMs == 0L) {
-                append("Timp egal.")
-            }
+    fun speakCheckpoint(checkpointName: String, deltaVsBestMs: Long?) {
+        if (deltaVsBestMs == null) {
+            // Nu avem un record anterior (Ghost), deci anunțăm doar numele punctului
+            speak(checkpointName)
+            return
         }
 
-        tts?.speak(text, TextToSpeech.QUEUE_ADD, null, null)
+        // Convertim milisecundele în secunde cu o zecimală (ex: 1.5)
+        val sec = abs(deltaVsBestMs) / 1000f
+
+        // Folosim formatarea US (cu punct, nu cu virgulă) pentru că motoarele TTS
+        // știu să citească punctul ca pe o zecimală naturală ("unu virgulă cinci")
+        val formattedSec = String.format(Locale.US, "%.1f", sec)
+
+        val message = when {
+            deltaVsBestMs < 0 -> "$checkpointName, minus $formattedSec secunde"
+            deltaVsBestMs > 0 -> "$checkpointName, plus $formattedSec secunde"
+            else -> "$checkpointName, timp egal"
+        }
+
+        speak(message)
     }
 
     fun speakLap(lapNumber: Int, lapTimeMs: Long) {
-        if (!isReady) return
-        val mins = (lapTimeMs / 1000) / 60
-        val secs = (lapTimeMs / 1000) % 60
+        val totalSeconds = lapTimeMs / 1000
+        val mins = totalSeconds / 60
+        val secs = totalSeconds % 60
 
-        val text = "Turul $lapNumber complet. Timp: $mins minute și $secs secunde."
-        tts?.speak(text, TextToSpeech.QUEUE_ADD, null, null)
+        val timeText = if (mins > 0) {
+            if (mins == 1L) "un minut și $secs secunde"
+            else "$mins minute și $secs secunde"
+        } else {
+            "$secs secunde"
+        }
+
+        speak("Turul $lapNumber, $timeText")
     }
 
+    // ── Funcții de curățare ──
+
+    // Alias pentru TelemetryManager
     fun destroy() {
+        shutdown()
+    }
+
+    fun shutdown() {
         tts?.stop()
         tts?.shutdown()
     }

@@ -4,12 +4,7 @@ import android.app.Application
 import android.content.Intent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.firstapp.data.GhostFrame
-import com.example.firstapp.data.GhostRepository
-import com.example.firstapp.data.LapData
-import com.example.firstapp.data.SplitData
-import com.example.firstapp.data.Track
-import com.example.firstapp.data.TrackRepository
+import com.example.firstapp.data.*
 import com.example.firstapp.data.local.AppDatabase
 import com.example.firstapp.managers.*
 import com.example.firstapp.racing.RaceRecord
@@ -17,32 +12,23 @@ import com.example.firstapp.service.LocationForegroundService
 import com.huawei.hms.maps.model.LatLng
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val context = application.applicationContext
 
-    // ── Database ──────────────────────────────────────────────────
     private val database = AppDatabase.getDatabase(application)
-
-    // ── Repositories ──────────────────────────────────────────────
     private val trackRepository = TrackRepository(database.trackDao())
     private val historyManager  = HistoryManager(database.raceHistoryDao())
     private val ghostRepository = GhostRepository(database.ghostRunDao())
 
-    // ── Manageri dedicați ─────────────────────────────────────────
     val settingsManager  = SettingsManager(context)
     val proximityManager = ProximityManager(viewModelScope)
     val gpsMonitor       = GpsMonitor(context, viewModelScope)
     val ghostManager     = GhostManager(ghostRepository, viewModelScope)
     val telemetryManager = TelemetryManager(context, viewModelScope, settingsManager)
 
-    // ── State delegat din manageri ────────────────────────────────
     val isTtsEnabled          = settingsManager.isTtsEnabled
     val proximityRadius       = settingsManager.proximityRadius
     val nearbyTrack           = proximityManager.nearbyTrack
@@ -57,18 +43,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val lastLapNotification   = telemetryManager.lastLapNotification
     val raceFinishData        = telemetryManager.raceFinishData
 
-    // ── Countdown ─────────────────────────────────────────────────
+    // ── REPARAT: Variabilele G-Force sunt acum proprietăți ale clasei ──
+    private val _gForceX = MutableStateFlow(0f)
+    val gForceX = _gForceX.asStateFlow()
+
+    private val _gForceY = MutableStateFlow(0f)
+    val gForceY = _gForceY.asStateFlow()
+
+    fun updateGForce(x: Float, y: Float) {
+        _gForceX.value = x
+        _gForceY.value = y
+    }
+
     private val _countdownValue  = MutableStateFlow<Int?>(null)
     val countdownValue = _countdownValue.asStateFlow()
 
     private val _isCountingDown = MutableStateFlow(false)
     val isCountingDown = _isCountingDown.asStateFlow()
 
-    // ── App State ─────────────────────────────────────────────────
     private val _appState = MutableStateFlow(AppState.CRUISE)
     val appState: StateFlow<AppState> = _appState.asStateFlow()
 
-    // ── Location ──────────────────────────────────────────────────
     private val _currentLatLng = MutableStateFlow<LatLng?>(null)
     val currentLatLng = _currentLatLng.asStateFlow()
     private val _currentLocationData = MutableStateFlow<android.location.Location?>(null)
@@ -83,11 +78,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val _hasLocationPermission = MutableStateFlow(false)
     val hasLocationPermission = _hasLocationPermission.asStateFlow()
 
-    // ── Track Selection ───────────────────────────────────────────
     private val _selectedTrack = MutableStateFlow<Track?>(null)
     val selectedTrack = _selectedTrack.asStateFlow()
 
-    // ── Saved Tracks — Flow reactiv direct din DB ─────────────────
     val savedTracks: StateFlow<List<Track>> = trackRepository.tracksFlow
         .stateIn(
             scope = viewModelScope,
@@ -95,7 +88,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             initialValue = emptyList()
         )
 
-    // ── Race History — Flow reactiv direct din DB ─────────────────
     val raceHistory: StateFlow<List<RaceRecord>> = historyManager.historyFlow
         .stateIn(
             scope = viewModelScope,
@@ -111,8 +103,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             LocationTracker.sharedLocationFlow.collect { data ->
                 _currentLatLng.value = data.latLng
-                _currentLocationData.value = data.rawLocation // <-- Actualizăm și locația brută!
+                _currentLocationData.value = data.rawLocation
                 _currentSpeed.value  = data.speed
+
+                if (data.speed >= 5) {
+                    _currentBearing.value = data.bearing
+                }
 
                 if (_appState.value == AppState.CRUISE) {
                     val shouldCheck = lastCheckedLocation == null || run {
@@ -144,7 +140,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // ── Transitions ───────────────────────────────────────────────
     fun transitionTo(state: AppState) {
         _appState.value = state
 
@@ -162,9 +157,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun selectTrack(track: Track) { _selectedTrack.value = track }
+    fun selectTrack(track: Track?) { _selectedTrack.value = track }
 
-    // ── Countdown ─────────────────────────────────────────────────
     fun startCountdown(onFinished: () -> Unit) {
         viewModelScope.launch {
             _isCountingDown.value = true
@@ -180,7 +174,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // ── GPS & Tracking ────────────────────────────────────────────
     fun onPermissionResult(granted: Boolean) {
         _hasLocationPermission.value = granted
         if (granted) startTracking()
@@ -191,9 +184,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         tracker.getLastKnownLocation { data ->
             data?.let {
                 _currentLatLng.value = data.latLng
-                _currentLocationData.value = data.rawLocation // <-- Actualizăm și locația brută!
+                _currentLocationData.value = data.rawLocation
                 _currentSpeed.value  = data.speed
-
             }
         }
         context.startForegroundService(
@@ -226,7 +218,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateBearing(bearing: Float) { _currentBearing.value = bearing }
 
-    // ── Track CRUD ────────────────────────────────────────────────
     fun saveTrack(track: Track) {
         viewModelScope.launch(Dispatchers.IO) {
             trackRepository.saveTrack(track)
@@ -236,7 +227,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun deleteTrack(track: Track) {
         viewModelScope.launch(Dispatchers.IO) {
             trackRepository.deleteTrack(track.id)
-            // Ștergem și istoricul + ghost-ul asociat
             historyManager.deleteAllForTrack(track.id)
             ghostRepository.deleteGhostForTrack(track.id)
 
@@ -246,7 +236,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // ── Race History ──────────────────────────────────────────────
     fun saveRace(
         record: RaceRecord,
         trackId: String? = null,
@@ -257,7 +246,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // ── Bridge → Manageri ─────────────────────────────────────────
     fun updateLapTime(ms: Long)                       = telemetryManager.updateLapTime(ms)
     fun updateSprintProgress(progress: Float)         = telemetryManager.updateSprintProgress(progress)
     fun onSplitRecorded(split: SplitData)             = telemetryManager.onSplitRecorded(split)
@@ -285,7 +273,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         telemetryManager.destroy()
     }
 
-    private val _paceNotesForTrack = MutableStateFlow<List<com.example.firstapp.data.PaceNote>>(emptyList())
+    private val _paceNotesForTrack = MutableStateFlow<List<PaceNote>>(emptyList())
     val paceNotesForTrack = _paceNotesForTrack.asStateFlow()
 
     fun loadPaceNotesForTrack(trackId: String) {

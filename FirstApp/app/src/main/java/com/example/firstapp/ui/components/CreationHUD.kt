@@ -40,11 +40,12 @@ fun CreationHUD(
     onCancel: () -> Unit,
     selectedRaceType: RaceType,
     onRaceTypeChanged: (RaceType) -> Unit,
-    // NOILE CALLBACK-URI PENTRU DRIVE MODE
     isRecording: Boolean,
     onStartDriveRecording: () -> Unit,
     onRecordDriveCheckpoint: () -> Unit,
     onStopDriveRecording: () -> Unit,
+    // NOU: Callback pentru salvarea radarului
+    onSaveSpeedCamera: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var currentCreationMode by remember { mutableStateOf(CreationMode.MANUAL) }
@@ -52,10 +53,9 @@ fun CreationHUD(
     Box(modifier = modifier.fillMaxSize()) {
 
         // ==========================================
-        // 1. ZONA SUS: Mod Creare (Manual / În mers)
+        // 1. ZONA SUS: Mod Creare (Ascunsă pe Radar)
         // ==========================================
-        // Ascundem selectorul de mod în timpul înregistrării active pentru a evita bug-uri
-        if (!isRecording) {
+        if (!isRecording && selectedRaceType != RaceType.SPEED_CAMERA) {
             Row(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -91,10 +91,30 @@ fun CreationHUD(
         }
 
         // ==========================================
-        // 2. CONȚINUT DINAMIC (MANUAL vs DRIVE)
+        // 2. CONȚINUT DINAMIC (DREAPTA)
         // ==========================================
-        if (currentCreationMode == CreationMode.MANUAL) {
-            // --- UI MANUAL (Existent) ---
+        if (selectedRaceType == RaceType.SPEED_CAMERA) {
+            // --- UI RADAR MODE ---
+            Column(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalAlignment = Alignment.End
+            ) {
+                MapSideButton("PUNCT", textColor = MaterialTheme.colorScheme.onPrimary, bgColor = MaterialTheme.colorScheme.primary, isActive = activeMode == WaypointType.START, onClick = onAddStart)
+            }
+
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(bottom = 15.dp, end = 16.dp)
+            ){
+                MapSideButton("CREAZĂ RADAR", textColor = MaterialTheme.colorScheme.onPrimary, bgColor = MaterialTheme.colorScheme.primary, onClick = onSaveSpeedCamera)
+            }
+
+        } else if (currentCreationMode == CreationMode.MANUAL) {
+            // --- UI MANUAL ---
             Column(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
@@ -105,7 +125,7 @@ fun CreationHUD(
                 MapSideButton("START", textColor = MaterialTheme.colorScheme.onPrimary, bgColor = MaterialTheme.colorScheme.primary, isActive = activeMode == WaypointType.START, onClick = onAddStart)
                 MapSideButton("+ CP", textColor = MaterialTheme.colorScheme.onSurface, bgColor = MaterialTheme.colorScheme.surfaceContainerLowest, hasBorder = true, isActive = activeMode == WaypointType.CHECKPOINT, onClick = onAddCheckpoint)
 
-                if (selectedRaceType != RaceType.LAP_RACE) {
+                if (selectedRaceType == RaceType.SPRINT) {
                     MapSideButton("FINISH", textColor = MaterialTheme.colorScheme.onPrimary, bgColor = MaterialTheme.colorScheme.primary, isActive = activeMode == WaypointType.FINISH, onClick = onAddFinish)
                 }
             }
@@ -118,7 +138,7 @@ fun CreationHUD(
                 MapSideButton("SALVEAZĂ", textColor = MaterialTheme.colorScheme.onPrimary, bgColor = MaterialTheme.colorScheme.primary, onClick = onSaveTrack)
             }
         } else {
-            // --- UI DRIVE MODE (ÎN MERS) ---
+            // --- UI DRIVE MODE ---
             Column(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
@@ -127,51 +147,27 @@ fun CreationHUD(
                 horizontalAlignment = Alignment.End
             ) {
                 if (!isRecording) {
-                    MapSideButton(
-                        "START REC",
-                        textColor = Color.White,
-                        bgColor = BrakeRed,
-                        onClick = onStartDriveRecording
-                    )
+                    MapSideButton("START REC", textColor = Color.White, bgColor = BrakeRed, onClick = onStartDriveRecording)
                 } else {
-                    MapSideButton(
-                        "+ CP",
-                        textColor = MaterialTheme.colorScheme.onSurface,
-                        bgColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-                        hasBorder = true,
-                        onClick = onRecordDriveCheckpoint
-                    )
-                    
-                    MapSideButton(
-                        "STOP & SAVE",
-                        textColor = Color.White,
-                        bgColor = MaterialTheme.colorScheme.primary,
-                        onClick = onStopDriveRecording
-                    )
+                    MapSideButton("+ CP", textColor = MaterialTheme.colorScheme.onSurface, bgColor = MaterialTheme.colorScheme.surfaceContainerLowest, hasBorder = true, onClick = onRecordDriveCheckpoint)
+                    MapSideButton("STOP & SAVE", textColor = Color.White, bgColor = MaterialTheme.colorScheme.primary, onClick = onStopDriveRecording)
                 }
             }
         }
 
-
         // ==========================================
-        // 3. ZONA JOS-STÂNGA: Buton Anulează (împins la start = 32.dp)
+        // 3. BUTON ANULEAZĂ
         // ==========================================
         Box(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(start = 42.dp, bottom = 15.dp)
         ) {
-            MapSideButton(
-                "ANULEAZĂ",
-                textColor = BrakeRed,
-                bgColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-                hasBorder = true,
-                onClick = onCancel,
-            )
+            MapSideButton("ANULEAZĂ", textColor = BrakeRed, bgColor = MaterialTheme.colorScheme.surfaceContainerLowest, hasBorder = true, onClick = onCancel)
         }
 
         // ==========================================
-        // 4. ZONA JOS-CENTRU: Sprint / Circuit
+        // 4. ZONA JOS-CENTRU: 3 TAB-URI
         // ==========================================
         Row(
             modifier = Modifier
@@ -182,12 +178,13 @@ fun CreationHUD(
                 .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(19.dp)),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // SPRINT
             Box(modifier = Modifier
                 .fillMaxHeight()
                 .clip(RoundedCornerShape(topStart = 19.dp, bottomStart = 19.dp))
                 .clickable { onRaceTypeChanged(RaceType.SPRINT) }
                 .background(if (selectedRaceType == RaceType.SPRINT) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent)
-                .padding(horizontal = 24.dp),
+                .padding(horizontal = 20.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text("SPRINT", color = if (selectedRaceType == RaceType.SPRINT) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Black, fontSize = 10.sp, letterSpacing = 1.sp)
@@ -195,50 +192,49 @@ fun CreationHUD(
 
             Box(modifier = Modifier.width(1.dp).fillMaxHeight(0.5f).background(MaterialTheme.colorScheme.outlineVariant))
 
+            // CIRCUIT
             Box(modifier = Modifier
                 .fillMaxHeight()
-                .clip(RoundedCornerShape(topEnd = 19.dp, bottomEnd = 19.dp))
                 .clickable { onRaceTypeChanged(RaceType.LAP_RACE) }
                 .background(if (selectedRaceType == RaceType.LAP_RACE) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent)
-                .padding(horizontal = 24.dp),
+                .padding(horizontal = 20.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text("CIRCUIT", color = if (selectedRaceType == RaceType.LAP_RACE) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Black, fontSize = 10.sp, letterSpacing = 1.sp)
+            }
+
+            Box(modifier = Modifier.width(1.dp).fillMaxHeight(0.5f).background(MaterialTheme.colorScheme.outlineVariant))
+
+            // RADAR
+            Box(modifier = Modifier
+                .fillMaxHeight()
+                .clip(RoundedCornerShape(topEnd = 19.dp, bottomEnd = 19.dp))
+                .clickable { onRaceTypeChanged(RaceType.SPEED_CAMERA) } // Aici e cheia
+                .background(if (selectedRaceType == RaceType.SPEED_CAMERA) BrakeRed.copy(alpha = 0.2f) else Color.Transparent)
+                .padding(horizontal = 20.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("RADAR", color = if (selectedRaceType == RaceType.SPEED_CAMERA) BrakeRed else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Black, fontSize = 10.sp, letterSpacing = 1.sp)
             }
         }
     }
 }
 
 @Composable
-private fun MapSideButton(
-    text: String,
-    textColor: Color,
-    bgColor: Color,
-    hasBorder: Boolean = false,
-    isActive: Boolean = false, // NOU
-    onClick: () -> Unit
-) {
+private fun MapSideButton(text: String, textColor: Color, bgColor: Color, hasBorder: Boolean = false, isActive: Boolean = false, onClick: () -> Unit) {
     val border = if (hasBorder) BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant) else null
-
-    // NOU: Animație infinită de pulsare dacă butonul este selectat
     val infiniteTransition = rememberInfiniteTransition(label = "pulse_transition")
     val alpha by infiniteTransition.animateFloat(
         initialValue = 1f,
-        targetValue = if (isActive) 0.3f else 1f, // Scade la 30% opacitate
-        animationSpec = infiniteRepeatable(
-            animation = tween(600, easing = LinearEasing), // Durează 600ms
-            repeatMode = RepeatMode.Reverse // Și se întoarce la fel
-        ),
+        targetValue = if (isActive) 0.3f else 1f,
+        animationSpec = infiniteRepeatable(animation = tween(600, easing = LinearEasing), repeatMode = RepeatMode.Reverse),
         label = "pulse_alpha"
     )
 
     Button(
         onClick = onClick,
         shape = CutCornerShape(topStart = 8.dp, bottomEnd = 8.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = bgColor.copy(alpha = alpha), // Aplicăm animația aici!
-            contentColor = textColor.copy(alpha = alpha)
-        ),
+        colors = ButtonDefaults.buttonColors(containerColor = bgColor.copy(alpha = alpha), contentColor = textColor.copy(alpha = alpha)),
         border = border,
         contentPadding = PaddingValues(0.dp),
         modifier = Modifier.size(width = 90.dp, height = 44.dp)
@@ -246,7 +242,6 @@ private fun MapSideButton(
         Text(text, fontWeight = FontWeight.Black, fontSize = 11.sp, letterSpacing = 1.sp)
     }
 }
-
 // ==========================================
 // 5. PREVIEW PENTRU ANDROID STUDIO
 // ==========================================
@@ -274,7 +269,8 @@ fun PreviewCreationHUD() {
             isRecording = false,
             onStartDriveRecording = {},
             onRecordDriveCheckpoint = {},
-            onStopDriveRecording = {}
+            onStopDriveRecording = {},
+            onSaveSpeedCamera = {}
         )
     }
 }

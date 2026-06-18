@@ -158,6 +158,7 @@ fun RaceTrackerApp(shouldStartCruise: Boolean = false) {
 
     BearingSensorEffect(
         appState = currentState,
+        currentSpeed = currentSpeed, // <--- ADAUGĂ ACEASTĂ LINIE
         onBearingChanged = { viewModel.updateBearing(it) }
     )
 
@@ -184,14 +185,14 @@ fun RaceTrackerApp(shouldStartCruise: Boolean = false) {
 
             // 2. HUD-ul aplicației (Conține și MapController + TrackMarkersOverlay)
             FSMOverlay(
-                viewModel    = viewModel,
-                state        = currentState,
-                speed        = currentSpeed,
-                latLng       = currentLatLng,
-                bearing      = currentBearing,
-                huaweiMap    = mapInstance,
+                state = currentState,
+                speed = currentSpeed,
+                latLng = currentLatLng,
+                bearing = currentBearing,
+                huaweiMap = mapInstance,
                 selectedTrack = selectedTrack,
-                onStateChange = { viewModel.transitionTo(it) }
+                onStateChange = { viewModel.transitionTo(it) },
+                viewModel = viewModel
             )
 
             // 5. Countdown + Dialog finish
