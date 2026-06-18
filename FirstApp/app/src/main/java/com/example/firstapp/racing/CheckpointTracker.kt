@@ -49,7 +49,7 @@ class CheckpointTracker(
 
         // MAGIC FIX: Am adăugat RaceType.SPEED_CAMERA alături de SPRINT
         when (track.raceType) {
-            RaceType.SPRINT, RaceType.SPEED_CAMERA -> {
+            RaceType.SPRINT, RaceType.SPEED_ZONE -> {
                 nextCheckpointIndex++
                 if (isFinish) onFinishReached()
             }
@@ -61,6 +61,10 @@ class CheckpointTracker(
                 } else {
                     nextCheckpointIndex++
                 }
+            }
+
+            RaceType.SPEED_TRAP -> {
+
             }
         }
     }

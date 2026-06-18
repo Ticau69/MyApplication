@@ -8,7 +8,7 @@ import com.example.firstapp.data.RunData
 import com.example.firstapp.data.SplitData
 import com.huawei.hms.maps.model.LatLng
 
-class RaceSession(private val raceType: RaceType) {
+class RaceSession(val raceType: RaceType) {
 
     val maxSpeed: Int
         get() = currentMaxSpeed

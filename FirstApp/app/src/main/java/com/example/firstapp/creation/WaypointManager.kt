@@ -25,7 +25,8 @@ class WaypointManager(
     private val context: Context,
     private val scope: CoroutineScope,
     private val trackDraft: TrackDraft,
-    private val onWaypointChanged: () -> Unit
+    private val onWaypointChanged: () -> Unit,
+    private val onLongPress: (LatLng) -> Unit
 ) {
     private var huaweiMap: HuaweiMap? = null
     var selectedType: WaypointType = WaypointType.START
@@ -38,6 +39,12 @@ class WaypointManager(
     fun setMap(map: HuaweiMap) {
         huaweiMap = map
         map.setOnMapClickListener { placeWaypoint(it) }
+
+        map.setOnMapLongClickListener { latLng ->
+            triggerHaptic()
+            onLongPress(latLng)
+        }
+
         map.setOnMarkerClickListener { handleMarkerClick(it); true }
     }
 

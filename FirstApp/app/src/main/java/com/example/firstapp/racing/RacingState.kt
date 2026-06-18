@@ -49,7 +49,8 @@ class RacingState(
             date = sdf.format(java.util.Date()),
             maxSpeed = session.maxSpeed,
             distanceKm = session.getTotalDistanceKm(),
-            durationSeconds = session.currentTimeMs / 1000
+            durationSeconds = session.currentTimeMs / 1000,
+            raceType = session.raceType
         )
         scope.launch {
             manager.saveRace(record)

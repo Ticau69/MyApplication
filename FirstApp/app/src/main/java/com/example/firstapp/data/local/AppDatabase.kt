@@ -14,7 +14,7 @@ import androidx.room.TypeConverters
         PaceNoteEntity::class,
         SpeedCameraEntity::class // ← adaugă
     ],
-    version = 4,                // ← incrementat
+    version = 5,                // ← incrementat
     exportSchema = false
 )
 @TypeConverters(Converters::class)

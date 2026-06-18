@@ -63,16 +63,12 @@ class LiveRecordingManager {
 
         recordedPoints.add(latLng)
 
-        val smooth = if (recordedPoints.size >= 3) {
-            PolineSmoother.smooth(recordedPoints, dpEpsilon = 0.00003, pointsPerSegment = 5)
-        } else {
-            recordedPoints
-        }
+        val display = if (recordedPoints.size >=3) {
+            PolineSmoother.douglasPeucker(recordedPoints, epsilon = 0.00002)
+        }else recordedPoints
 
-        if (smooth.size >= 2) {
-            outlinePolyline?.points = smooth
-            innerPolyline?.points   = smooth
-        }
+        outlinePolyline?.points = display
+        innerPolyline?.points = display
     }
 
     fun stop() { isRecording = false }

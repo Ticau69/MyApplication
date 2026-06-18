@@ -124,7 +124,7 @@ fun CruiseHUD(
                 modifier = Modifier.background(MaterialTheme.colorScheme.surfaceContainer)
             ) {
                 DropdownMenuItem(
-                    text = { Text("Creare Traseu Nou", color = MaterialTheme.colorScheme.onSurface) },
+                    text = { Text("Creare Activitate Noua", color = MaterialTheme.colorScheme.onSurface) },
                     onClick = {
                         settingsExpanded = false
                         hideSystemBars()

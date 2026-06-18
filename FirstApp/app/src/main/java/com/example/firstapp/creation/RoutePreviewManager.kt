@@ -47,7 +47,7 @@ class RoutePreviewManager(
                 lastRoutedPoints = routed
                 if (routed.size < 2) return@withContext
 
-                val smooth = PolineSmoother.smooth(routed, dpEpsilon = 0.00003, pointsPerSegment = 3)
+                val smooth = PolineSmoother.douglasPeucker(routed, epsilon = 0.00003)
 
                 outlinePolyline = huaweiMap?.addPolyline(
                     PolylineOptions().addAll(smooth)

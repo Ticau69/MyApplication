@@ -5,7 +5,8 @@ import com.huawei.hms.maps.model.LatLng
 enum class RaceType {
     SPRINT,    // A→B, un singur traseu, fără revenire la start
     LAP_RACE,   // Circuit, treci prin Start/Finish de mai multe ori
-    SPEED_CAMERA
+    SPEED_TRAP, // Radar fix (1 punct)
+    SPEED_ZONE
 }
 
 data class Track(

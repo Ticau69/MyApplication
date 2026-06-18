@@ -3,6 +3,7 @@ package com.example.firstapp.data.local
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.example.firstapp.data.LapData
+import com.example.firstapp.data.RaceType
 import com.example.firstapp.racing.RaceRecord
 
 @Entity(tableName = "race_history")
@@ -13,14 +14,16 @@ data class RaceHistoryEntity(
     val maxSpeed: Int,
     val distanceKm: Double,
     val durationSeconds: Long,
-    val laps: List<LapData>                      // Convertit prin Converters
+    val laps: List<LapData>,                     // Convertit prin Converters
+    val raceType: RaceType = RaceType.SPRINT
 ) {
     fun toRaceRecord(): RaceRecord = RaceRecord(
         id              = id,
         date            = date,
         maxSpeed        = maxSpeed,
         distanceKm      = distanceKm,
-        durationSeconds = durationSeconds
+        durationSeconds = durationSeconds,
+        raceType        = raceType
     )
 
     companion object {
@@ -35,7 +38,8 @@ data class RaceHistoryEntity(
             maxSpeed        = record.maxSpeed,
             distanceKm      = record.distanceKm,
             durationSeconds = record.durationSeconds,
-            laps            = laps
+            laps            = laps,
+            raceType        = record.raceType
         )
     }
 }

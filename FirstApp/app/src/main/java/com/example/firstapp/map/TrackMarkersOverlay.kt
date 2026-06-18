@@ -29,10 +29,11 @@ fun TrackMarkersOverlay(
         if (appState != AppState.CRUISE) return@LaunchedEffect
 
         savedTracks.forEach { track ->
-            val icon = if (track.raceType == RaceType.LAP_RACE) {
-                BitmapDescriptorFactory.fromResource(R.drawable.circuit_icon)
-            } else {
-                BitmapDescriptorFactory.fromResource(R.drawable.sprint_icon)
+            val icon = when (track.raceType) {
+                RaceType.LAP_RACE -> BitmapDescriptorFactory.fromResource(R.drawable.circuit_icon)
+                RaceType.SPEED_ZONE -> BitmapDescriptorFactory.fromResource(R.drawable.speedzone_icon)
+                RaceType.SPEED_TRAP -> BitmapDescriptorFactory.fromResource(R.drawable.speedcamera_icon)// Iconița ta pentru Zone
+                else -> BitmapDescriptorFactory.fromResource(R.drawable.sprint_icon)
             }
 
             val markerOptions = MarkerOptions()

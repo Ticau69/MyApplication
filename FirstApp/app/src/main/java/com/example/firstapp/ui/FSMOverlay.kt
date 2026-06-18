@@ -161,6 +161,7 @@ fun FSMOverlay(
 
                 AppState.RACE_CREATION -> CreationScreen(
                     creationLogic = creationLogic,
+                    huaweiMap = huaweiMap,
                     currentLatLng = latLng,
                     onStateChange = onStateChange
                 )

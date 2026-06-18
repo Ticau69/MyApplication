@@ -141,7 +141,8 @@ class TrackRacingState(
             date            = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(java.util.Date()),
             maxSpeed        = session.maxSpeed,
             distanceKm      = session.getTotalDistanceKm(),
-            durationSeconds = session.currentTimeMs / 1000
+            durationSeconds = session.currentTimeMs / 1000,
+            raceType        = track.raceType
         )
         scope.launch { manager.saveRace(record) }
     }

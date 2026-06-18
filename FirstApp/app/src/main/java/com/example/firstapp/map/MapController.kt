@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.createBitmap
 import com.example.firstapp.AppState
+import com.example.firstapp.data.SpeedCamera
 import com.example.firstapp.ui.theme.FirstAppTheme
 import com.example.trackappv2.R
 import com.huawei.hms.maps.CameraUpdateFactory
@@ -228,6 +229,19 @@ fun MapController(
                 )
             }
         }
+    }
+}
+// În MapController.kt
+fun drawSpeedCameras(map: HuaweiMap, cameras: List<SpeedCamera>, context: Context) {
+    val radarIcon = bitmapFromVector(context, R.drawable.speedcamera_icon) // Asigură-te că ai iconița în drawable
+
+    cameras.forEach { camera ->
+        map.addMarker(
+            MarkerOptions()
+                .position(LatLng(camera.lat, camera.lng))
+                .title(camera.name)
+                .icon(radarIcon)
+        )
     }
 }
 

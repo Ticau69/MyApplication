@@ -10,6 +10,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -46,6 +47,8 @@ fun CreationHUD(
     onStopDriveRecording: () -> Unit,
     // NOU: Callback pentru salvarea radarului
     onSaveSpeedCamera: () -> Unit,
+    hasStart: Boolean = false,
+    hasFinish: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     var currentCreationMode by remember { mutableStateOf(CreationMode.MANUAL) }
@@ -53,9 +56,37 @@ fun CreationHUD(
     Box(modifier = modifier.fillMaxSize()) {
 
         // ==========================================
-        // 1. ZONA SUS: Mod Creare (Ascunsă pe Radar)
+        // 1. ZONA SUS: Banner Info / Mod Creare
         // ==========================================
-        if (!isRecording && selectedRaceType != RaceType.SPEED_CAMERA) {
+        if (selectedRaceType == RaceType.SPEED_TRAP) {
+            val bannerText = when {
+                hasStart && hasFinish -> "DETECTAT: SPEED ZONE (VITEZĂ MEDIE)"
+                hasStart -> "DETECTAT: SPEED TRAP (RADAR FIX) | ADAUGĂ PUNCTUL 2 PENTRU ZONE"
+                else -> "CONFIGURARE CAMERĂ: PLASEAZĂ PUNCTUL 1"
+            }
+            val bannerColor = when {
+                hasStart && hasFinish -> Color(0xFF00E676) // Verde
+                hasStart -> BrakeRed
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            }
+
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 40.dp)
+                    .background(MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.9f), RoundedCornerShape(12.dp))
+                    .border(1.dp, bannerColor.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                    .padding(horizontal = 24.dp, vertical = 10.dp)
+            ) {
+                Text(
+                    text = bannerText,
+                    color = bannerColor,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 1.sp
+                )
+            }
+        } else if (!isRecording) {
             Row(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -93,8 +124,7 @@ fun CreationHUD(
         // ==========================================
         // 2. CONȚINUT DINAMIC (DREAPTA)
         // ==========================================
-        if (selectedRaceType == RaceType.SPEED_CAMERA) {
-            // --- UI RADAR MODE ---
+        if (selectedRaceType == RaceType.SPEED_TRAP) {
             Column(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
@@ -102,19 +132,21 @@ fun CreationHUD(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 horizontalAlignment = Alignment.End
             ) {
-                MapSideButton("PUNCT", textColor = MaterialTheme.colorScheme.onPrimary, bgColor = MaterialTheme.colorScheme.primary, isActive = activeMode == WaypointType.START, onClick = onAddStart)
+                // Modificăm vizual butoanele laterale dacă punctele sunt setate
+                val startColor  = if (hasStart) Color(0xFF00E676) else MaterialTheme.colorScheme.primary
+                val finishColor = if (hasFinish) Color(0xFF00E676) else MaterialTheme.colorScheme.primary
+
+                MapSideButton(if (hasStart) "PUNCT 1 ✓" else "PUNCT 1", textColor = MaterialTheme.colorScheme.onPrimary, bgColor = startColor, isActive = activeMode == WaypointType.START, onClick = onAddStart)
+                MapSideButton(if (hasFinish) "PUNCT 2 ✓" else "PUNCT 2", textColor = MaterialTheme.colorScheme.onPrimary, bgColor = finishColor, isActive = activeMode == WaypointType.FINISH, onClick = onAddFinish)
             }
 
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(bottom = 15.dp, end = 16.dp)
-            ){
-                MapSideButton("CREAZĂ RADAR", textColor = MaterialTheme.colorScheme.onPrimary, bgColor = MaterialTheme.colorScheme.primary, onClick = onSaveSpeedCamera)
+            Box(modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = 15.dp, end = 16.dp)){
+                // Schimbăm eticheta butonului de salvare
+                val btnActionText = if (hasStart && hasFinish) "CREAZĂ ZONE" else "CREAZĂ TRAP"
+                MapSideButton(btnActionText, textColor = MaterialTheme.colorScheme.onPrimary, bgColor = MaterialTheme.colorScheme.primary, onClick = onSaveSpeedCamera)
             }
 
         } else if (currentCreationMode == CreationMode.MANUAL) {
-            // --- UI MANUAL ---
             Column(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
@@ -130,15 +162,10 @@ fun CreationHUD(
                 }
             }
 
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(bottom = 15.dp, end = 16.dp)
-            ){
+            Box(modifier = Modifier.align(Alignment.BottomEnd).padding(bottom = 15.dp, end = 16.dp)){
                 MapSideButton("SALVEAZĂ", textColor = MaterialTheme.colorScheme.onPrimary, bgColor = MaterialTheme.colorScheme.primary, onClick = onSaveTrack)
             }
         } else {
-            // --- UI DRIVE MODE ---
             Column(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
@@ -158,11 +185,7 @@ fun CreationHUD(
         // ==========================================
         // 3. BUTON ANULEAZĂ
         // ==========================================
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(start = 42.dp, bottom = 15.dp)
-        ) {
+        Box(modifier = Modifier.align(Alignment.BottomStart).padding(start = 42.dp, bottom = 15.dp)) {
             MapSideButton("ANULEAZĂ", textColor = BrakeRed, bgColor = MaterialTheme.colorScheme.surfaceContainerLowest, hasBorder = true, onClick = onCancel)
         }
 
@@ -173,18 +196,18 @@ fun CreationHUD(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 15.dp)
-                .height(38.dp)
-                .background(MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.85f), RoundedCornerShape(19.dp))
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(19.dp)),
+                .height(32.dp)
+                .width(284.dp)
+                .background(MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.85f), RoundedCornerShape(16.dp))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp)),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // SPRINT
             Box(modifier = Modifier
+                .weight(1f)
                 .fillMaxHeight()
-                .clip(RoundedCornerShape(topStart = 19.dp, bottomStart = 19.dp))
+                .clip(RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp))
                 .clickable { onRaceTypeChanged(RaceType.SPRINT) }
-                .background(if (selectedRaceType == RaceType.SPRINT) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent)
-                .padding(horizontal = 20.dp),
+                .background(if (selectedRaceType == RaceType.SPRINT) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent),
                 contentAlignment = Alignment.Center
             ) {
                 Text("SPRINT", color = if (selectedRaceType == RaceType.SPRINT) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Black, fontSize = 10.sp, letterSpacing = 1.sp)
@@ -192,12 +215,11 @@ fun CreationHUD(
 
             Box(modifier = Modifier.width(1.dp).fillMaxHeight(0.5f).background(MaterialTheme.colorScheme.outlineVariant))
 
-            // CIRCUIT
             Box(modifier = Modifier
+                .weight(1f)
                 .fillMaxHeight()
                 .clickable { onRaceTypeChanged(RaceType.LAP_RACE) }
-                .background(if (selectedRaceType == RaceType.LAP_RACE) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent)
-                .padding(horizontal = 20.dp),
+                .background(if (selectedRaceType == RaceType.LAP_RACE) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else Color.Transparent),
                 contentAlignment = Alignment.Center
             ) {
                 Text("CIRCUIT", color = if (selectedRaceType == RaceType.LAP_RACE) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Black, fontSize = 10.sp, letterSpacing = 1.sp)
@@ -205,16 +227,15 @@ fun CreationHUD(
 
             Box(modifier = Modifier.width(1.dp).fillMaxHeight(0.5f).background(MaterialTheme.colorScheme.outlineVariant))
 
-            // RADAR
             Box(modifier = Modifier
+                .weight(1f)
                 .fillMaxHeight()
-                .clip(RoundedCornerShape(topEnd = 19.dp, bottomEnd = 19.dp))
-                .clickable { onRaceTypeChanged(RaceType.SPEED_CAMERA) } // Aici e cheia
-                .background(if (selectedRaceType == RaceType.SPEED_CAMERA) BrakeRed.copy(alpha = 0.2f) else Color.Transparent)
-                .padding(horizontal = 20.dp),
+                .clip(RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp))
+                .clickable { onRaceTypeChanged(RaceType.SPEED_TRAP) }
+                .background(if (selectedRaceType == RaceType.SPEED_TRAP) BrakeRed.copy(alpha = 0.2f) else Color.Transparent),
                 contentAlignment = Alignment.Center
             ) {
-                Text("RADAR", color = if (selectedRaceType == RaceType.SPEED_CAMERA) BrakeRed else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Black, fontSize = 10.sp, letterSpacing = 1.sp)
+                Text("CAMERA", color = if (selectedRaceType == RaceType.SPEED_TRAP) BrakeRed else MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Black, fontSize = 10.sp, letterSpacing = 1.sp)
             }
         }
     }
@@ -242,6 +263,90 @@ private fun MapSideButton(text: String, textColor: Color, bgColor: Color, hasBor
         Text(text, fontWeight = FontWeight.Black, fontSize = 11.sp, letterSpacing = 1.sp)
     }
 }
+
+@Composable
+fun WaypointContextMneu(
+    selectedRaceType: RaceType,
+    onSelect: (WaypointType) -> Unit,
+    onDismiss: () -> Unit
+){
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clickable(
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() }
+            ){ onDismiss() },
+        contentAlignment = Alignment.Center
+    ){
+        Card(
+            modifier = Modifier.width(220.dp).wrapContentHeight(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        ){
+            Column(
+                modifier = Modifier.padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    "PLASEAZĂ PUNCT",
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    fontWeight = FontWeight.Black,
+                    fontSize = 11.sp,
+                    letterSpacing = 1.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                ContextMenuItem(
+                    icon = "🚩",
+                    label = "START",
+                    onClick = { onSelect(WaypointType.START) }
+                )
+
+                ContextMenuItem(
+                    icon = "📍",
+                    label = "CHECKPOINT",
+                    onClick = { onSelect(WaypointType.CHECKPOINT) }
+                )
+
+                if (selectedRaceType == RaceType.SPRINT) {
+                    ContextMenuItem(
+                        icon = "🏁",
+                        label = "FINISH",
+                        onClick = { onSelect(WaypointType.FINISH) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ContextMenuItem(icon: String, label: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ){
+        Text(icon, fontSize = 18.sp)
+        Text(
+            label,
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+
+    }
+}
+
 // ==========================================
 // 5. PREVIEW PENTRU ANDROID STUDIO
 // ==========================================
